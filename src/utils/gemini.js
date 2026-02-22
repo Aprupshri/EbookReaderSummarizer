@@ -15,6 +15,29 @@ export const generateSummary = async (metadata, apiKey) => {
     ? `\n  - **The current chapter begins with:** "${anchors.start}..."\n  - **The current chapter ends near:** "${anchors.end}..."` 
     : '';
 
+  const summaryType = localStorage.getItem('gemini_summary_type') || 'fiction';
+  let typeInstructions = '';
+
+  if (summaryType === 'fiction') {
+    typeInstructions = `
+  **Structure your response as follows:**
+  1.  **The Story So Far:** A bulleted list of the key plot points leading up to this exact moment. Focus heavily on what happened in the chapters immediately preceding this one.
+  2.  **Key Characters:** A bulleted list of 2-4 main characters and exactly what situation they are currently in.
+  3.  **Current Situation:** A single sentence setting the stage for what the reader is about to read next.`;
+  } else if (summaryType === 'non-fiction') {
+    typeInstructions = `
+  **Structure your response as follows:**
+  1.  **Core Arguments & Facts:** A bulleted list of the main factual points or arguments the author has presented leading up to this point. Include key evidence or examples used.
+  2.  **Key Takeaways:** A bulleted list of 2-4 actionable or important takeaways from the recent chapters.
+  3.  **Current Focus:** A single sentence summarizing the topic the author is currently discussing.`;
+  } else if (summaryType === 'technical') {
+    typeInstructions = `
+  **Structure your response as follows:**
+  1.  **Key Concepts & Definitions:** A bulleted list of the technical terms, concepts, or methodologies introduced so far. Focus heavily on those from the most recent chapters.
+  2.  **Core Processes:** A bulleted list of 2-4 important processes, architectures, or code structures outlined by the author.
+  3.  **Current Focus:** A single sentence summarizing the specific technical topic the author is currently explaining.`;
+  }
+
   const prompt = `You are an expert literary assistant. The user is reading the book "${title}" by ${author}.
   PLEASE USE GOOGLE SEARCH to find detailed, accurate plot summaries of this specific book to ensure your answer is perfectly accurate.
   
@@ -24,13 +47,9 @@ export const generateSummary = async (metadata, apiKey) => {
   - **They just finished reading the chapter:** ${chapterName || 'Unknown'}${anchorContext}
   
   **Task:**
-  Provide a **detailed but concise** summary of the specific plot events that occurred *leading up to exactly this point* in the book.
-  Be extremely careful NOT to spoil events that happen after the chapter they just finished.
-  
-  **Structure your response as follows:**
-  1.  **The Story So Far:** A bulleted list of the key plot points leading up to this exact moment. Focus heavily on what happened in the chapters immediately preceding this one.
-  2.  **Key Characters:** A bulleted list of 2-4 main characters and exactly what situation they are currently in.
-  3.  **Current Situation:** A single sentence setting the stage for what the reader is about to read next.
+  Provide a **detailed but concise** summary of the specific events, facts, or concepts that occurred *leading up to exactly this point* in the book.
+  Be extremely careful NOT to spoil anything that happens after the chapter they just finished.
+  ${typeInstructions}
   
   Keep the total output under 400 words. Use Markdown (bold, bullet points).`;
 

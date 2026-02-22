@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, Save } from 'lucide-react';
+import { X, Key, Save, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const SettingsModal = ({ isOpen, onClose }) => {
     const [apiKey, setApiKey] = useState('');
+    const [summaryType, setSummaryType] = useState('fiction');
     const [saved, setSaved] = useState(false);
 
     useEffect(() => {
@@ -11,10 +12,16 @@ const SettingsModal = ({ isOpen, onClose }) => {
         if (storedKey) {
             setApiKey(storedKey);
         }
+
+        const storedType = localStorage.getItem('gemini_summary_type');
+        if (storedType) {
+            setSummaryType(storedType);
+        }
     }, [isOpen]);
 
     const handleSave = () => {
         localStorage.setItem('gemini_api_key', apiKey);
+        localStorage.setItem('gemini_summary_type', summaryType);
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
     };
@@ -55,6 +62,25 @@ const SettingsModal = ({ isOpen, onClose }) => {
                             />
                             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                                 Required for AI summaries. Get one for free at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google AI Studio</a>.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                                <BookOpen size={16} />
+                                Default Summary Style
+                            </label>
+                            <select
+                                value={summaryType}
+                                onChange={(e) => setSummaryType(e.target.value)}
+                                className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none cursor-pointer"
+                            >
+                                <option value="fiction">Fiction (Plot & Characters)</option>
+                                <option value="non-fiction">Non-Fiction (Arguments & Takeaways)</option>
+                                <option value="technical">Technical (Concepts & Methodologies)</option>
+                            </select>
+                            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                Customizes how the AI structures your generated chapter summaries.
                             </p>
                         </div>
 
