@@ -3,7 +3,7 @@ import { X, Trash2, Edit3, AlignLeft, BookMarked, MessageSquare } from 'lucide-r
 import { getHighlights, deleteHighlight, getSummaries, deleteSummary } from '../utils/storage';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight }) => {
+const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onClickHighlight }) => {
     const [activeTab, setActiveTab] = useState('highlights'); // 'highlights' or 'summaries'
     const [highlights, setHighlights] = useState([]);
     const [summaries, setSummaries] = useState([]);
@@ -117,10 +117,17 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight }) =
                                     </div>
                                 ) : (
                                     highlights.map((h, i) => (
-                                        <div key={i} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 group relative">
+                                        <div
+                                            key={i}
+                                            onClick={() => onClickHighlight && onClickHighlight(h.cfiRange)}
+                                            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 group relative cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+                                        >
                                             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
-                                                    onClick={() => handleDeleteHighlight(h.cfiRange)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteHighlight(h.cfiRange);
+                                                    }}
                                                     className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md transition-colors"
                                                     title="Delete Highlight"
                                                 >

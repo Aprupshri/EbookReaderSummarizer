@@ -773,6 +773,18 @@ const Reader = ({ book, onBack }) => {
                         }
                     }
                 }}
+                onClickHighlight={(cfiRange) => {
+                    setShowNotes(false);
+                    if (viewerRef.current) {
+                        setTimeout(() => {
+                            try {
+                                viewerRef.current.goTo(cfiRange);
+                            } catch (e) {
+                                console.warn("Could not navigate to highlight", e);
+                            }
+                        }, 100);
+                    }
+                }}
             />
 
             <DictionaryModal
