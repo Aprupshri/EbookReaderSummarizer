@@ -83,3 +83,28 @@ export const deleteBook = async (id) => {
   const db = await initDB();
   return db.delete(STORE_NAME, id);
 };
+
+export const saveHighlight = async (bookId, cfiRange, text, color = 'yellow') => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (book) {
+    if (!book.highlights) book.highlights = [];
+    book.highlights.push({ cfiRange, text, color, timestamp: Date.now() });
+    await db.put(STORE_NAME, book);
+  }
+};
+
+export const getHighlights = async (bookId) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  return book ? (book.highlights || []) : [];
+};
+
+export const deleteHighlight = async (bookId, cfiRange) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (book && book.highlights) {
+    book.highlights = book.highlights.filter(h => h.cfiRange !== cfiRange);
+    await db.put(STORE_NAME, book);
+  }
+};

@@ -1,26 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
-import ePub from 'epubjs';
-import { updateProgress, saveEbookSession } from '../utils/storage';
+import 'foliate-js/view.js';
+import { updateProgress, saveEbookSession, saveHighlight, getHighlights, deleteHighlight } from '../utils/storage';
 import { generateSummary } from '../utils/gemini';
 import { useReaderSettings } from '../utils/useReaderSettings';
-import { ArrowLeft, Settings, Sparkles, ChevronLeft, ChevronRight, Type, AlignJustify, Scroll, X, List } from 'lucide-react';
+import { ArrowLeft, Settings, Sparkles, ChevronLeft, ChevronRight, Type, AlignJustify, Scroll, X, List, Highlighter, BookOpen } from 'lucide-react';
 import SummaryModal from './SummaryModal';
 import SettingsModal from './SettingsModal';
+import DictionaryModal from './DictionaryModal';
 
 const Reader = ({ book, onBack }) => {
     const viewerRef = useRef(null);
-    const renditionRef = useRef(null);
-    const bookRef = useRef(null);
     const [location, setLocation] = useState(null);
     const [isReady, setIsReady] = useState(false);
     const [showSummary, setShowSummary] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showAppearance, setShowAppearance] = useState(false);
     const [showToc, setShowToc] = useState(false);
+    const [showControls, setShowControls] = useState(true);
     const [toc, setToc] = useState([]);
 
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [summaryText, setSummaryText] = useState('');
+    const [loadError, setLoadError] = useState(null);
+
+    const [selection, setSelection] = useState(null); // { word, cfiRange }
+    const [showDictionary, setShowDictionary] = useState(false);
+    const selectionRef = useRef(null); // mirror selection for callbacks
 
     // ✅ Persisted appearance settings
     const { settings, update } = useReaderSettings();
@@ -37,64 +42,146 @@ const Reader = ({ book, onBack }) => {
     useEffect(() => {
         if (!book || !viewerRef.current) return;
 
-        if (renditionRef.current) {
-            renditionRef.current.destroy();
-        }
-
-        // ✅ book.file is now an ArrayBuffer — pass directly to ePub
-        const epubBook = ePub(book.file);
-        bookRef.current = epubBook;
-
-        const rendition = epubBook.renderTo(viewerRef.current, {
-            width: '100%',
-            height: '100%',
-            flow: flow,
-            manager: flow === 'paginated' ? 'default' : 'continuous',
-        });
-
-        renditionRef.current = rendition;
+        const view = viewerRef.current;
+        let isActive = true;
 
         const initBook = async () => {
-            await rendition.display(book.cfi || undefined);
-            updateTheme(rendition);
-            setIsReady(true);
+            try {
+                // foliate-view has an open() method that accepts a File or Blob.
+                // Depending on the format of book.file (ArrayBuffer or Blob), we might need to convert it.
+                let fileToOpen = book.file;
+                if (!(fileToOpen instanceof Blob)) {
+                    // Was stored as ArrayBuffer - wrap as a proper File object with .epub extension
+                    // foliate-js needs the filename to detect the format
+                    fileToOpen = new File(
+                        [fileToOpen],
+                        (book.title || 'book') + '.epub',
+                        { type: 'application/epub+zip' }
+                    );
+                }
+                await view.open(fileToOpen);
 
-            epubBook.loaded.navigation.then(({ toc }) => {
-                setToc(toc);
-            });
+                // Always navigate after open() - foliate-view won't render
+                // content until an explicit navigation is triggered.
+                await view.goTo(book.cfi || 0);
 
-            rendition.on('relocated', (location) => {
-                setLocation(location);
-                updateProgress(book.id, location.start.cfi);
+                // Read TOC after open
+                const foliateBook = view.book;
+                if (foliateBook) {
+                    setToc(foliateBook.toc || []);
+                }
 
-                const currentPage = location.start.displayed?.page;
-                if (currentPage !== undefined) {
-                    if (sessionRef.current.startPage === null) {
-                        sessionRef.current.startPage = currentPage;
+                setIsReady(true);
+
+                // Load saved highlights
+                const savedHighlights = await getHighlights(book.id);
+
+            } catch (err) {
+                console.error("Foliate load error", err);
+                setLoadError(err.message || String(err));
+            }
+        };
+
+        const handleRelocate = (e) => {
+            const detail = e.detail;
+            if (!detail) return;
+
+            // Re-shape foliate's location detail into our state variable
+            const sectionCurrent = detail.section?.current !== undefined ? detail.section.current + 1 : (detail.index !== undefined ? detail.index + 1 : 1);
+            const sectionTotal = detail.section?.total || view.book?.sections?.length || 1;
+
+            const locationData = {
+                start: {
+                    cfi: detail.cfi,
+                    percentage: detail.fraction,
+                    displayed: { page: sectionCurrent, total: sectionTotal }, // Approximations for now
+                    tocItem: detail.tocItem,
+                }
+            };
+
+            setLocation(locationData);
+            if (detail.cfi) {
+                updateProgress(book.id, detail.cfi);
+            }
+
+            if (detail.index !== undefined) {
+                const currentPage = detail.index;
+                if (sessionRef.current.startPage === null) {
+                    sessionRef.current.startPage = currentPage;
+                }
+                sessionRef.current.lastPage = currentPage;
+                sessionRef.current.maxPageReached = Math.max(sessionRef.current.maxPageReached, currentPage);
+            }
+        };
+
+        view.addEventListener('relocate', handleRelocate);
+
+        const handleLoad = (e) => {
+            const { doc, index } = e.detail;
+
+            // Apply theme NOW — renderer is ready for this section
+            updateTheme(view);
+
+            doc.addEventListener('selectionchange', () => {
+                const sel = doc.getSelection();
+                const word = sel.toString().trim();
+
+                if (word && word.length > 0) {
+                    try {
+                        const range = sel.getRangeAt(0);
+                        const cfiRange = view.getCFI(index, range);
+                        setSelection({ word, cfiRange });
+                    } catch (err) {
+                        setSelection({ word, cfiRange: null });
                     }
-                    sessionRef.current.lastPage = currentPage;
-                    sessionRef.current.maxPageReached = Math.max(sessionRef.current.maxPageReached, currentPage);
+                } else {
+                    setSelection(null);
                 }
             });
+
+            // ✅ Immersive mode toggle on click
+            doc.addEventListener('click', (ev) => {
+                const sel = doc.getSelection();
+                if (sel && sel.toString().trim().length > 0) return; // Don't toggle if selecting text
+                if (ev.target.closest('a') || ev.target.tagName.toLowerCase() === 'img') return;
+
+                setShowControls(prev => {
+                    if (prev) {
+                        setShowAppearance(false);
+                        setShowToc(false);
+                        setShowSettings(false);
+                    }
+                    return !prev;
+                });
+            });
         };
+
+        view.addEventListener('load', handleLoad);
+
+        // ── Selection approach ─────────────────────────────────────
+        // Since Foliate renders into an iframe (or shadow DOM), we can listen to selectionchange on its document
+        // Or listen for custom text selection events. Foliate doesn't fire a custom 'selected' event by default.
+        // We will add an overlay interceptor below.
 
         initBook();
 
         return () => {
-            if (renditionRef.current) {
-                renditionRef.current.destroy();
-            }
+            isActive = false;
+            view.removeEventListener('relocate', handleRelocate);
+            view.removeEventListener('load', handleLoad);
+            try { view.close && view.close(); } catch (_) { /* foliate cleanup may throw if renderer was never initialized */ }
         };
     }, [book, flow]);
 
     // Update styles when settings change
     useEffect(() => {
-        if (renditionRef.current) {
-            updateTheme(renditionRef.current);
+        if (viewerRef.current) {
+            updateTheme(viewerRef.current);
         }
-    }, [theme, fontSize, fontFamily, lineHeight]);
+    }, [theme, fontSize, fontFamily, lineHeight, maxWidth]);
 
-    const updateTheme = (rendition) => {
+    const updateTheme = (view) => {
+        if (!view) return;
         const themes = {
             light: { color: '#1a1a1a', background: '#ffffff' },
             dark: { color: '#e5e7eb', background: '#111827' },
@@ -103,28 +190,43 @@ const Reader = ({ book, onBack }) => {
 
         const selectedTheme = themes[theme] || themes.light;
 
-        // Force colors using !important so hardcoded book styles don't override the app theme
-        const rules = {
-            'body': {
-                'background': `${selectedTheme.background} !important`,
-                'color': `${selectedTheme.color} !important`,
-                'font-family': `${fontFamily} !important`,
-                'line-height': `${lineHeight} !important`,
-                'font-size': `${fontSize}% !important`,
-                'padding': '0 10px !important',
-            },
-            'p, div, span, h1, h2, h3, h4, h5, h6, li, blockquote, a': {
-                'color': `${selectedTheme.color} !important`,
-                'font-family': `${fontFamily} !important`,
-                'line-height': `${lineHeight} !important`,
-                'background': 'transparent !important'
+        const inlineStyles = `
+            body {
+                background: ${selectedTheme.background} !important;
+                color: ${selectedTheme.color} !important;
+                font-family: ${fontFamily} !important;
+                line-height: ${lineHeight} !important;
+                font-size: ${fontSize}% !important;
+                padding: 0 10px !important;
+                margin: 0;
             }
-        };
+            p, div, span, h1, h2, h3, h4, h5, h6, li, blockquote, a {
+                color: ${selectedTheme.color} !important;
+                font-family: ${fontFamily} !important;
+                line-height: ${lineHeight} !important;
+                background: transparent !important;
+            }
+            ::selection {
+                background: rgba(255, 255, 0, 0.3) !important;
+            }
+        `;
 
-        // We use a dynamic theme name so epub.js reliably applies the CSS update when toggling back and forth
-        const themeName = `custom-${theme}-${Date.now()}`;
-        rendition.themes.register(themeName, rules);
-        rendition.themes.select(themeName);
+        // foliate-view injects CSS using the .renderer.setStyles() API
+        if (view.renderer && view.renderer.setStyles) {
+            view.renderer.setStyles(inlineStyles);
+
+            // Setup view properties and layout settings
+            view.renderer.setAttribute('margin', '20px');
+            view.renderer.setAttribute('max-inline-size', maxWidth === '100%' ? '1200px' : maxWidth);
+            view.renderer.setAttribute('flow', flow); // 'paginated' or 'scrolled'
+
+            // Setting filter for dark mode natively on the web component part wrapper
+            if (theme === 'dark') {
+                view.style.setProperty('color-scheme', 'dark');
+            } else {
+                view.style.setProperty('color-scheme', 'light');
+            }
+        }
     };
 
     const handleBack = async () => {
@@ -147,8 +249,8 @@ const Reader = ({ book, onBack }) => {
         onBack();
     };
 
-    const handlePrev = () => renditionRef.current?.prev();
-    const handleNext = () => renditionRef.current?.next();
+    const handlePrev = () => viewerRef.current?.prev();
+    const handleNext = () => viewerRef.current?.next();
 
     // ✅ Extract "Anchors" (first and last readable paragraph of current chapter)
     const extractChapterAnchors = async (epubBook, chapterHref) => {
@@ -183,30 +285,49 @@ const Reader = ({ book, onBack }) => {
         setSummaryText('');
 
         try {
-            const currentLocation = renditionRef.current.location.start;
-            const epubBook = bookRef.current;
-            const chapterItem = epubBook.spine.get(currentLocation.cfi);
-            const chapterName = chapterItem.href;
+            const view = viewerRef.current;
+            const foliateBook = view.book;
+            const currentLocationDetail = location?.start;
+            const cfi = currentLocationDetail?.cfi;
+
+            // Foliate gives us the current section via index
+            const currentSectionIndex = location?.start?.displayed?.page ? location.start.displayed.page - 1 : 0;
+            const chapterItem = foliateBook.sections[currentSectionIndex];
+            const chapterName = chapterItem?.id || `Section ${currentSectionIndex}`;
 
             let betterChapterTitle = chapterName;
             let previousChapters = [];
 
-            const toc = epubBook.navigation.toc;
-            const currentChapterIndex = toc.findIndex(item => item.href.includes(chapterItem.href));
+            const toc = foliateBook.toc || [];
+            // Basic matching of section ID or CFI against TOC index
+            const currentChapterIndex = toc.findIndex(item => item.href && item.href.includes(chapterItem?.id));
 
             if (currentChapterIndex !== -1) {
                 betterChapterTitle = toc[currentChapterIndex].label;
                 previousChapters = toc.slice(0, currentChapterIndex).map(item => item.label);
             }
 
-            // ✅ Extract tiny anchor text for Gemini API
-            const anchors = await extractChapterAnchors(epubBook, chapterItem.href);
+            // Extract anchor text natively from the loaded section document
+            let anchors = { start: '', end: '' };
+            if (chapterItem && chapterItem.createDocument) {
+                try {
+                    const doc = await chapterItem.createDocument();
+                    const textNodes = Array.from(doc.body.querySelectorAll('p, div'))
+                        .map(node => node.textContent.trim())
+                        .filter(text => text.length > 30);
+
+                    if (textNodes.length > 0) {
+                        anchors.start = textNodes[0].substring(0, 150);
+                        anchors.end = textNodes[textNodes.length - 1].substring(0, 150);
+                    }
+                } catch (e) { console.warn(e); }
+            }
 
             const metadata = {
                 title: book.title,
                 author: book.author,
                 chapterName: betterChapterTitle,
-                progress: currentLocation.percentage,
+                progress: currentLocationDetail?.percentage || Math.max(0, currentSectionIndex / foliateBook.sections.length),
                 previousChapters,
                 anchors,
             };
@@ -227,13 +348,53 @@ const Reader = ({ book, onBack }) => {
         }
     };
 
+    const handleHighlight = async () => {
+        if (!selection) return;
+
+        try {
+            // foliate-js highlight implementation needs a custom overlayer integration
+            console.log("Saving highlight: ", selection.word, selection.cfiRange);
+            await saveHighlight(book.id, selection.cfiRange, selection.word, 'yellow');
+        } catch (e) {
+            console.warn('Could not apply highlight', e);
+        }
+
+        clearSelection();
+    };
+
+    const handleDictionary = () => {
+        if (!selection) return;
+        setShowDictionary(true);
+    };
+
+    const clearSelection = () => {
+        if (viewerRef.current) {
+            const view = viewerRef.current;
+            // Try to clear selection from foliate's active document iframe
+            try {
+                if (view.renderer && view.renderer.iframe) {
+                    const doc = view.renderer.iframe.contentDocument;
+                    if (doc) doc.getSelection().removeAllRanges();
+                }
+            } catch (e) { }
+        }
+        setSelection(null);
+    };
+
+
     return (
-        <div className={`flex flex-col h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-white text-gray-900'}`}>
+        <div
+            className={`flex-1 w-full flex flex-col relative overflow-hidden ${theme === 'dark' ? 'bg-gray-900 text-white' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-white text-gray-900'}`}
+        >
             {/* Toolbar */}
-            <header className={`flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 border-b z-10 shadow-sm backdrop-blur-sm ${theme === 'dark' ? 'border-gray-800 bg-gray-900/90' :
-                theme === 'sepia' ? 'border-[#e3dccb] bg-[#f4ecd8]/90' :
-                    'border-gray-200 bg-white/90'
-                }`}>
+            <header
+                className={`absolute top-0 left-0 right-0 flex items-center justify-between px-2 sm:px-4 pb-2 sm:pb-3 border-b z-50 shadow-sm backdrop-blur-sm transition-transform duration-300 ${showControls ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+                    } ${theme === 'dark' ? 'border-gray-800 bg-gray-900/95' :
+                        theme === 'sepia' ? 'border-[#e3dccb] bg-[#f4ecd8]/95' :
+                            'border-gray-200 bg-white/95'
+                    }`}
+                style={{ paddingTop: 'var(--safe-pt)' }}
+            >
                 <div className="flex items-center gap-2 sm:gap-4">
                     <button onClick={handleBack} className="p-2 hover:opacity-70 rounded-full transition-colors flex-shrink-0">
                         <ArrowLeft size={20} />
@@ -280,7 +441,7 @@ const Reader = ({ book, onBack }) => {
 
             {/* Appearance Menu Popover */}
             {showAppearance && (
-                <div className={`absolute top-16 right-4 z-50 w-72 p-4 rounded-xl shadow-xl border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+                <div className={`absolute top-14 right-4 z-[60] w-72 p-4 rounded-xl shadow-xl border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
                     }`}>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-medium text-sm">Appearance</h3>
@@ -290,12 +451,14 @@ const Reader = ({ book, onBack }) => {
                     {/* Theme */}
                     <div className="mb-4">
                         <label className="text-xs text-gray-500 mb-2 block">Theme</label>
-                        <div className="flex gap-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
+                        <div className={`flex gap-2 p-1 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#e3dccb]' : 'bg-gray-100'}`}>
                             {['light', 'sepia', 'dark'].map(t => (
                                 <button
                                     key={t}
                                     onClick={() => update('theme', t)}
-                                    className={`flex-1 py-1.5 rounded-md text-xs capitalize transition-colors ${theme === t ? 'bg-white dark:bg-gray-700 shadow-sm font-medium' : 'hover:bg-gray-200 dark:hover:bg-gray-800'
+                                    className={`flex-1 py-1.5 rounded-md text-xs capitalize transition-colors ${theme === t
+                                        ? (theme === 'dark' ? 'bg-gray-700 shadow-sm font-medium' : theme === 'sepia' ? 'bg-[#f4ecd8] shadow-sm font-medium' : 'bg-white shadow-sm font-medium')
+                                        : (theme === 'dark' ? 'hover:bg-gray-800' : theme === 'sepia' ? 'hover:bg-[#d6cebc]' : 'hover:bg-gray-200')
                                         }`}
                                 >
                                     {t}
@@ -308,76 +471,106 @@ const Reader = ({ book, onBack }) => {
                     <div className="mb-4">
                         <label className="text-xs text-gray-500 mb-2 block">Font Size ({fontSize}%)</label>
                         <div className="flex items-center gap-3">
-                            <button onClick={() => update('fontSize', Math.max(50, fontSize - 10))} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">A-</button>
+                            <button onClick={() => update('fontSize', Math.max(50, fontSize - 10))} className={`p-1 rounded ${theme === 'dark' ? 'hover:bg-gray-700' : theme === 'sepia' ? 'hover:bg-[#e3dccb]' : 'hover:bg-gray-100'}`}>A-</button>
                             <input
                                 type="range" min="50" max="200" value={fontSize}
                                 onChange={(e) => update('fontSize', Number(e.target.value))}
-                                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                                className={`flex-1 h-2 rounded-lg appearance-none cursor-pointer ${theme === 'dark' ? 'bg-gray-700' : theme === 'sepia' ? 'bg-[#e3dccb]' : 'bg-gray-200'}`}
                             />
-                            <button onClick={() => update('fontSize', Math.min(200, fontSize + 10))} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">A+</button>
+                            <button onClick={() => update('fontSize', Math.min(200, fontSize + 10))} className={`p-1 rounded ${theme === 'dark' ? 'hover:bg-gray-700' : theme === 'sepia' ? 'hover:bg-[#e3dccb]' : 'hover:bg-gray-100'}`}>A+</button>
                         </div>
                     </div>
 
                     {/* Font Family */}
                     <div className="mb-4">
                         <label className="text-xs text-gray-500 mb-2 block">Font Family</label>
-                        <select
-                            value={fontFamily}
-                            onChange={(e) => update('fontFamily', e.target.value)}
-                            className={`w-full p-2 rounded-lg text-sm border ${theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'
-                                }`}
-                        >
-                            <option value="Inter, sans-serif">Sans Serif</option>
-                            <option value="Merriweather, serif">Serif</option>
-                            <option value="monospace">Monospace</option>
-                        </select>
+                        <div className={`flex gap-1 p-1 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#e3dccb]' : 'bg-gray-100'}`}>
+                            {[
+                                { label: 'Sans', value: 'Inter, sans-serif' },
+                                { label: 'Serif', value: 'Merriweather, serif' },
+                                { label: 'Mono', value: 'monospace' }
+                            ].map(f => (
+                                <button
+                                    key={f.value}
+                                    onClick={() => update('fontFamily', f.value)}
+                                    style={{ fontFamily: f.value }}
+                                    className={`flex-1 py-1.5 rounded-md text-[11px] sm:text-xs transition-colors truncate px-1 ${fontFamily === f.value
+                                        ? (theme === 'dark' ? 'bg-gray-700 shadow-sm font-medium' : theme === 'sepia' ? 'bg-[#f4ecd8] shadow-sm font-medium' : 'bg-white shadow-sm font-medium')
+                                        : (theme === 'dark' ? 'hover:bg-gray-800' : theme === 'sepia' ? 'hover:bg-[#d6cebc]' : 'hover:bg-gray-200')
+                                        }`}
+                                >
+                                    {f.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    {/* Width & Line Height Grid */}
+                    {/* Width & Line Height Sections */}
                     <div className="grid grid-cols-2 gap-3 mb-4">
                         <div>
                             <label className="text-xs text-gray-500 mb-2 block">Max Width</label>
-                            <select
-                                value={maxWidth}
-                                onChange={(e) => update('maxWidth', e.target.value)}
-                                className={`w-full p-2 rounded-lg text-sm border ${theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'
-                                    }`}
-                            >
-                                <option value="600px">Narrow</option>
-                                <option value="800px">Standard</option>
-                                <option value="1000px">Wide</option>
-                                <option value="100%">Full</option>
-                            </select>
+                            <div className={`flex flex-col gap-1 p-1 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#e3dccb]' : 'bg-gray-100'}`}>
+                                {[
+                                    { label: 'Narrow', value: '600px' },
+                                    { label: 'Standard', value: '800px' },
+                                    { label: 'Wide', value: '1000px' },
+                                    { label: 'Full', value: '100%' }
+                                ].map(w => (
+                                    <button
+                                        key={w.value}
+                                        onClick={() => update('maxWidth', w.value)}
+                                        className={`w-full py-1.5 rounded-md text-[11px] sm:text-xs transition-colors truncate px-1 ${maxWidth === w.value
+                                            ? (theme === 'dark' ? 'bg-gray-700 shadow-sm font-medium' : theme === 'sepia' ? 'bg-[#f4ecd8] shadow-sm font-medium' : 'bg-white shadow-sm font-medium')
+                                            : (theme === 'dark' ? 'hover:bg-gray-800' : theme === 'sepia' ? 'hover:bg-[#d6cebc]' : 'hover:bg-gray-200')
+                                            }`}
+                                    >
+                                        {w.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         <div>
                             <label className="text-xs text-gray-500 mb-2 block">Line Height</label>
-                            <select
-                                value={lineHeight}
-                                onChange={(e) => update('lineHeight', e.target.value)}
-                                className={`w-full p-2 rounded-lg text-sm border ${theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'
-                                    }`}
-                            >
-                                <option value="1.4">Compact</option>
-                                <option value="1.8">Normal</option>
-                                <option value="2.2">Loose</option>
-                            </select>
+                            <div className={`flex flex-col gap-1 p-1 rounded-lg h-full ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#e3dccb]' : 'bg-gray-100'}`}>
+                                {[
+                                    { label: 'Compact', value: '1.4' },
+                                    { label: 'Normal', value: '1.8' },
+                                    { label: 'Loose', value: '2.2' }
+                                ].map(lh => (
+                                    <button
+                                        key={lh.value}
+                                        onClick={() => update('lineHeight', lh.value)}
+                                        className={`w-full py-1.5 rounded-md text-[11px] sm:text-xs transition-colors truncate px-1 flex-1 ${lineHeight === lh.value
+                                            ? (theme === 'dark' ? 'bg-gray-700 shadow-sm font-medium' : theme === 'sepia' ? 'bg-[#f4ecd8] shadow-sm font-medium' : 'bg-white shadow-sm font-medium')
+                                            : (theme === 'dark' ? 'hover:bg-gray-800' : theme === 'sepia' ? 'hover:bg-[#d6cebc]' : 'hover:bg-gray-200')
+                                            }`}
+                                    >
+                                        {lh.label}
+                                    </button>
+                                ))}
+                                <div className="flex-1"></div>
+                            </div>
                         </div>
                     </div>
 
                     {/* View Mode */}
                     <div>
                         <label className="text-xs text-gray-500 mb-2 block">View Mode</label>
-                        <div className="flex gap-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg">
+                        <div className={`flex gap-2 p-1 rounded-lg ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#e3dccb]' : 'bg-gray-100'}`}>
                             <button
                                 onClick={() => update('flow', 'paginated')}
-                                className={`flex-1 py-1.5 rounded-md text-xs flex items-center justify-center gap-1 transition-colors ${flow === 'paginated' ? 'bg-white dark:bg-gray-700 shadow-sm font-medium' : 'hover:bg-gray-200 dark:hover:bg-gray-800'
+                                className={`flex-1 py-1.5 rounded-md text-xs flex items-center justify-center gap-1 transition-colors ${flow === 'paginated'
+                                    ? (theme === 'dark' ? 'bg-gray-700 shadow-sm font-medium' : theme === 'sepia' ? 'bg-[#f4ecd8] shadow-sm font-medium' : 'bg-white shadow-sm font-medium')
+                                    : (theme === 'dark' ? 'hover:bg-gray-800' : theme === 'sepia' ? 'hover:bg-[#d6cebc]' : 'hover:bg-gray-200')
                                     }`}
                             >
                                 <AlignJustify size={14} /> Pages
                             </button>
                             <button
                                 onClick={() => update('flow', 'scrolled')}
-                                className={`flex-1 py-1.5 rounded-md text-xs flex items-center justify-center gap-1 transition-colors ${flow === 'scrolled' ? 'bg-white dark:bg-gray-700 shadow-sm font-medium' : 'hover:bg-gray-200 dark:hover:bg-gray-800'
+                                className={`flex-1 py-1.5 rounded-md text-xs flex items-center justify-center gap-1 transition-colors ${flow === 'scrolled'
+                                    ? (theme === 'dark' ? 'bg-gray-700 shadow-sm font-medium' : theme === 'sepia' ? 'bg-[#f4ecd8] shadow-sm font-medium' : 'bg-white shadow-sm font-medium')
+                                    : (theme === 'dark' ? 'hover:bg-gray-800' : theme === 'sepia' ? 'hover:bg-[#d6cebc]' : 'hover:bg-gray-200')
                                     }`}
                             >
                                 <Scroll size={14} /> Scroll
@@ -387,17 +580,28 @@ const Reader = ({ book, onBack }) => {
                 </div>
             )}
 
-            {/* Reader Area */}
-            <div className={`flex-1 relative overflow-hidden flex justify-center ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#f4ecd8]' : 'bg-gray-50'
-                }`}>
-                <div
+            {/* Reader Area — top offset prevents content bleeding behind status bar */}
+            <div
+                className={`absolute bottom-0 left-0 right-0 ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#f4ecd8]' : 'bg-gray-50'}`}
+                style={{ top: 'var(--safe-pt)' }}
+            >
+                {loadError && (
+                    <div className="absolute inset-x-4 top-20 z-[100] bg-red-100 dark:bg-red-900/50 rounded-xl p-4 text-red-900 dark:text-red-100 flex flex-col items-center justify-center text-center shadow-lg border border-red-200 dark:border-red-800">
+                        <span className="font-bold text-lg mb-2">⚠ Error Loading Book</span>
+                        <p className="text-sm font-mono break-all max-w-[90%]">{loadError}</p>
+                        <button onClick={onBack} className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg">
+                            Go Back
+                        </button>
+                    </div>
+                )}
+
+                <foliate-view
                     ref={viewerRef}
-                    className={`h-full shadow-sm transition-all duration-300 ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#f4ecd8]' : 'bg-white'
-                        }`}
-                    style={{ width: maxWidth === '100%' ? '100%' : maxWidth, maxWidth: '100%' }}
+                    class={`absolute inset-0 ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#f4ecd8]' : 'bg-white'}`}
+                    style={{ outline: 'none' }}
                 />
 
-                {/* Navigation Overlays (Desktop - Only for Paginated) */}
+                {/* Navigation Overlays - only for paginated mode */}
                 {flow === 'paginated' && (
                     <>
                         <button
@@ -412,8 +616,6 @@ const Reader = ({ book, onBack }) => {
                         >
                             <ChevronRight size={24} />
                         </button>
-
-                        {/* Touch zones for mobile */}
                         <div className="absolute inset-y-0 left-0 w-1/6 z-0 md:hidden" onClick={handlePrev} />
                         <div className="absolute inset-y-0 right-0 w-1/6 z-0 md:hidden" onClick={handleNext} />
                     </>
@@ -422,7 +624,7 @@ const Reader = ({ book, onBack }) => {
 
             {/* TOC Sidebar Overlay */}
             {showToc && (
-                <div className={`absolute top-14 left-0 bottom-10 w-72 sm:w-80 shadow-2xl z-40 flex flex-col transform transition-transform border-r ${theme === 'dark' ? 'bg-gray-900 border-gray-800' :
+                <div className={`absolute top-14 left-0 bottom-10 w-72 sm:w-80 shadow-2xl z-50 flex flex-col transform transition-transform border-r ${theme === 'dark' ? 'bg-gray-900 border-gray-800' :
                     theme === 'sepia' ? 'bg-[#f4ecd8] border-[#e3dccb]' :
                         'bg-white border-gray-200'
                     }`}>
@@ -439,7 +641,7 @@ const Reader = ({ book, onBack }) => {
                                     <li key={idx}>
                                         <button
                                             onClick={() => {
-                                                renditionRef.current.display(item.href);
+                                                viewerRef.current?.goTo(item.href);
                                                 setShowToc(false);
                                             }}
                                             className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors truncate"
@@ -459,18 +661,29 @@ const Reader = ({ book, onBack }) => {
             )}
 
             {/* Footer / Progress */}
-            <div className={`px-4 py-2 text-center text-xs z-10 relative shadow-[0_-2px_10px_rgba(0,0,0,0.05)] ${theme === 'dark' ? 'border-gray-800 bg-gray-900 border-t text-gray-400' :
-                theme === 'sepia' ? 'border-[#e3dccb] bg-[#f4ecd8] text-[#5b4636]/70' :
-                    'border-gray-200 bg-white text-gray-500'
-                }`}>
+            <div
+                className={`absolute left-0 right-0 bottom-0 px-4 py-2 text-xs z-50 flex justify-between items-center gap-4 transition-transform duration-300 ${showControls ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
+                    } ${theme === 'dark' ? 'border-gray-800 bg-gray-900/95 border-t text-gray-400' :
+                        theme === 'sepia' ? 'border-[#e3dccb] bg-[#f4ecd8]/95 text-[#5b4636]/70' :
+                            'border-gray-200 bg-white/95 text-gray-500'
+                    }`}
+                style={{ paddingBottom: '8px' }}
+            >
                 {location ? (
-                    <span>
-                        {flow === 'paginated'
-                            ? `Page ${location.start.displayed.page} of ${location.start.displayed.total}`
-                            : `${Math.round(location.start.percentage * 100)}% Completed`
-                        }
-                    </span>
-                ) : 'Loading...'}
+                    <>
+                        <span className="truncate flex-1 text-left font-medium opacity-80" title={location.start.tocItem?.label}>
+                            {location.start.tocItem?.label || ''}
+                        </span>
+                        <span className="flex-shrink-0 text-right opacity-90">
+                            {flow === 'paginated'
+                                ? `Section ${location.start.displayed.page} of ${location.start.displayed.total}`
+                                : `${Math.round((location.start.percentage || 0) * 100)}% Completed`
+                            }
+                        </span>
+                    </>
+                ) : (
+                    <span className="w-full text-center">Loading...</span>
+                )}
             </div>
 
             <SummaryModal
@@ -484,6 +697,34 @@ const Reader = ({ book, onBack }) => {
                 isOpen={showSettings}
                 onClose={() => setShowSettings(false)}
             />
+
+            <DictionaryModal
+                isOpen={showDictionary}
+                onClose={() => {
+                    setShowDictionary(false);
+                    clearSelection();
+                }}
+                word={selection?.word}
+            />
+
+            {/* Selection Floating Toolbar */}
+            {selection && !showDictionary && (
+                <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-800 rounded-full shadow-2xl border border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center gap-4 animate-in slide-in-from-bottom-5">
+                    <button onClick={handleHighlight} className="flex items-center gap-2 text-sm font-medium text-yellow-600 dark:text-yellow-500 hover:opacity-80 transition-opacity">
+                        <Highlighter size={18} />
+                        <span>Highlight</span>
+                    </button>
+                    <div className="w-px h-5 bg-gray-300 dark:bg-gray-600"></div>
+                    <button onClick={handleDictionary} className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:opacity-80 transition-opacity">
+                        <BookOpen size={18} />
+                        <span>Define</span>
+                    </button>
+                    <div className="w-px h-5 bg-gray-300 dark:bg-gray-600"></div>
+                    <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                        <X size={18} />
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

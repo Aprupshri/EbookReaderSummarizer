@@ -8,8 +8,18 @@ function App() {
   const [currentBook, setCurrentBook] = useState(null);
   const [showDashboard, setShowDashboard] = useState(false);
 
+  const isFullScreen = (currentBook !== null) && !showDashboard;
+
   return (
-    <div className="min-h-screen w-full bg-gray-50 dark:bg-gray-900 transition-colors">
+    <div
+      className="h-[100dvh] overflow-hidden flex flex-col w-full bg-gray-50 dark:bg-gray-900 transition-colors"
+      style={isFullScreen ? {} : {
+        paddingTop: 'var(--safe-pt)',
+        paddingBottom: 'var(--safe-pb)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
+      }}
+    >
       {showDashboard ? (
         <Dashboard onBack={() => setShowDashboard(false)} />
       ) : currentBook ? (

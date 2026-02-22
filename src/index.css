@@ -4,6 +4,10 @@
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+  /* @capacitor-community/safe-area injects --safe-area-inset-* custom properties.
+     These work even on Android WebView < 140 where env() incorrectly returns 0px. */
+  --safe-pt: max(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 40px);
+  --safe-pb: max(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)), 20px);
 }
 
 body {
@@ -22,4 +26,12 @@ html.dark body {
 #root {
   width: 100%;
   min-height: 100vh;
+}
+
+foliate-view::part(container) {
+  scrollbar-width: none;
+}
+
+foliate-view::part(container)::-webkit-scrollbar {
+  display: none;
 }

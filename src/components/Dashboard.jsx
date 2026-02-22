@@ -64,7 +64,7 @@ const Dashboard = ({ onBack }) => {
 
     if (loading) {
         return (
-            <div className="flex-1 flex justify-center items-center h-full min-h-screen bg-gray-50 dark:bg-gray-900">
+            <div className="flex-1 flex justify-center items-center overflow-y-auto">
                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
             </div>
         );
@@ -73,7 +73,7 @@ const Dashboard = ({ onBack }) => {
     const { totalBooks, totalPages, totalDurationMs, streakData } = stats;
 
     return (
-        <div className="p-4 md:p-10 w-full max-w-7xl mx-auto flex-1 bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <div className="p-4 md:p-10 w-full max-w-7xl mx-auto flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
             <header className="flex items-center gap-2 sm:gap-4 mb-6 sm:mb-10">
                 <button
                     onClick={onBack}

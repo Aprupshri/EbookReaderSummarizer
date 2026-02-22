@@ -7,7 +7,7 @@ import AddPhysicalBook from './AddPhysicalBook';
 
 const Library = ({ onOpenBook, onOpenDashboard }) => {
     const [books, setBooks] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
     const [showAddPhysical, setShowAddPhysical] = useState(false);
     const [streakData, setStreakData] = useState({ currentStreak: 0, maxStreak: 0, readToday: false });
 
@@ -25,16 +25,12 @@ const Library = ({ onOpenBook, onOpenDashboard }) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        setLoading(true);
+        setIsUploading(true);
         try {
-            // Convert File → ArrayBuffer for reliable IndexedDB serialization
-            const arrayBuffer = await file.arrayBuffer();
-            const book = ePub(arrayBuffer.slice(0)); // slice to hand off a copy
-
+            const book = ePub(file);
             await book.ready;
             const metadata = await book.loaded.metadata;
 
-            // Try to get cover
             let coverBlob = null;
             try {
                 const coverUrl = await book.coverUrl();
@@ -50,7 +46,7 @@ const Library = ({ onOpenBook, onOpenDashboard }) => {
                 id: Date.now().toString(),
                 title: metadata.title || file.name.replace('.epub', ''),
                 author: metadata.creator || 'Unknown Author',
-                file: arrayBuffer,   // ✅ Store as ArrayBuffer, not a File object
+                file: file,
                 cover: coverBlob,
                 cfi: null,
                 lastRead: Date.now(),
@@ -62,22 +58,22 @@ const Library = ({ onOpenBook, onOpenDashboard }) => {
             console.error('Error adding book:', error);
             alert('Failed to add book. Please try another file.');
         } finally {
-            setLoading(false);
-            // Reset the input so the same file can be re-selected
+            setIsUploading(false);
             e.target.value = '';
         }
     };
 
     const handleDelete = async (e, bookId) => {
-        e.stopPropagation(); // Don't open the book
+        e.stopPropagation();
         if (!window.confirm('Remove this book from your library?')) return;
         await deleteBook(bookId);
         await loadBooks();
     };
 
     return (
-        <div className="p-4 md:p-10 w-full max-w-7xl mx-auto flex-1 gap-4 sm:gap-6">
-            <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8 gap-4 flex-wrap">
+        <>
+            {/* Header — sits outside the scroll container so it can never be scrolled past */}
+            <header className="flex-shrink-0 flex flex-col sm:flex-row sm:justify-between sm:items-center px-4 md:px-10 pt-4 pb-4 gap-4 flex-wrap bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 z-20">
                 <div className="flex items-center gap-3 sm:gap-4">
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">My Library</h1>
                     <button
@@ -112,87 +108,87 @@ const Library = ({ onOpenBook, onOpenDashboard }) => {
                             accept=".epub"
                             onChange={handleFileUpload}
                             className="hidden"
-                            disabled={loading}
+                            disabled={isUploading}
                         />
                     </label>
                 </div>
             </header>
 
-            {loading && (
-                <div className="text-center py-10">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Processing book...</p>
-                </div>
-            )}
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {books.map((book) => (
-                    <div
-                        key={book.id}
-                        className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden border border-gray-100 dark:border-gray-700"
-                        onClick={() => onOpenBook(book)}
-                    >
-                        <div className="aspect-[2/3] bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
-                            {book.cover ? (
-                                <img
-                                    src={URL.createObjectURL(book.cover)}
-                                    alt={book.title}
-                                    className="w-full h-full object-cover"
-                                    onLoad={(e) => URL.revokeObjectURL(e.target.src)}
-                                />
-                            ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-4 text-center">
-                                    <Book size={48} className="mb-2" />
-                                    <span className="text-xs">{book.title}</span>
-                                </div>
-                            )}
-
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-
-                            {/* ✅ Delete button on hover */}
-                            <button
-                                onClick={(e) => handleDelete(e, book.id)}
-                                className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 shadow-md"
-                                title="Remove book"
-                            >
-                                <Trash2 size={14} />
-                            </button>
-                        </div>
-
-                        <div className="p-4">
-                            <h3 className="font-semibold text-gray-900 dark:text-white truncate" title={book.title}>
-                                {book.title}
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                                {book.author}
-                            </p>
-                            {book.cfi && (
-                                <div className="mt-2 text-xs text-blue-600 font-medium">
-                                    In Progress
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ))}
-
-                {books.length === 0 && !loading && (
-                    <div className="col-span-full text-center py-20 bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
-                        <Book size={48} className="mx-auto text-gray-300 mb-4" />
-                        <p className="text-gray-500">No books yet. Add a physical book or upload an EPUB to get started!</p>
+            {/* Scrollable content — completely below the header, books can never escape upward */}
+            <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6">
+                {isUploading && (
+                    <div className="text-center py-4 flex items-center justify-center gap-3 text-sm text-gray-500 mb-4">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                        <span>Processing book, please wait...</span>
                     </div>
                 )}
-            </div>
 
-            {showAddPhysical && (
-                <AddPhysicalBook
-                    onClose={() => setShowAddPhysical(false)}
-                    onBookAdded={() => {
-                        setShowAddPhysical(false);
-                        loadBooks();
-                    }}
-                />
-            )}
-        </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {books.map((book) => (
+                        <div
+                            key={book.id}
+                            className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden border border-gray-100 dark:border-gray-700"
+                            onClick={() => onOpenBook(book)}
+                        >
+                            <div className="aspect-[2/3] bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
+                                {book.cover ? (
+                                    <img
+                                        src={URL.createObjectURL(book.cover)}
+                                        alt={book.title}
+                                        className="w-full h-full object-cover"
+                                        onLoad={(e) => URL.revokeObjectURL(e.target.src)}
+                                    />
+                                ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-4 text-center">
+                                        <Book size={48} className="mb-2" />
+                                        <span className="text-xs">{book.title}</span>
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                                <button
+                                    onClick={(e) => handleDelete(e, book.id)}
+                                    className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 shadow-md"
+                                    title="Remove book"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
+
+                            <div className="p-4">
+                                <h3 className="font-semibold text-gray-900 dark:text-white truncate" title={book.title}>
+                                    {book.title}
+                                </h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                    {book.author}
+                                </p>
+                                {book.cfi && (
+                                    <div className="mt-2 text-xs text-blue-600 font-medium">
+                                        In Progress
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+
+                    {books.length === 0 && !isUploading && (
+                        <div className="col-span-full text-center py-20 bg-gray-50 dark:bg-gray-800/50 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+                            <Book size={48} className="mx-auto text-gray-300 mb-4" />
+                            <p className="text-gray-500">No books yet. Add a physical book or upload an EPUB to get started!</p>
+                        </div>
+                    )}
+                </div>
+
+                {showAddPhysical && (
+                    <AddPhysicalBook
+                        onClose={() => setShowAddPhysical(false)}
+                        onBookAdded={() => {
+                            setShowAddPhysical(false);
+                            loadBooks();
+                        }}
+                    />
+                )}
+            </div>
+        </>
     );
 };
 
