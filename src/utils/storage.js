@@ -108,3 +108,28 @@ export const deleteHighlight = async (bookId, cfiRange) => {
     await db.put(STORE_NAME, book);
   }
 };
+
+export const saveSummary = async (bookId, chapterName, text) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (book) {
+    if (!book.summaries) book.summaries = [];
+    book.summaries.push({ chapterName, text, timestamp: Date.now() });
+    await db.put(STORE_NAME, book);
+  }
+};
+
+export const getSummaries = async (bookId) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  return book ? (book.summaries || []) : [];
+};
+
+export const deleteSummary = async (bookId, timestamp) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (book && book.summaries) {
+    book.summaries = book.summaries.filter(s => s.timestamp !== timestamp);
+    await db.put(STORE_NAME, book);
+  }
+};

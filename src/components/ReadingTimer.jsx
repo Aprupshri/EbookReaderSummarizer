@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, ArrowLeft, Save, Clock, BookOpen, List, X, Sparkles, Settings } from 'lucide-react';
-import { updatePhysicalProgress } from '../utils/storage';
+import { Play, Square, ArrowLeft, Save, Clock, BookOpen, List, X, Sparkles, Settings, BookMarked } from 'lucide-react';
+import { updatePhysicalProgress, saveSummary } from '../utils/storage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateSummary } from '../utils/gemini';
 import SummaryModal from './SummaryModal';
 import SettingsModal from './SettingsModal';
+import NotesModal from './NotesModal';
 
 const ReadingTimer = ({ book, onBack }) => {
     const [isRunning, setIsRunning] = useState(false);
@@ -16,6 +17,7 @@ const ReadingTimer = ({ book, onBack }) => {
     // Summarization States
     const [showSummary, setShowSummary] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
+    const [showNotes, setShowNotes] = useState(false);
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [summaryText, setSummaryText] = useState('');
     const [showChapterPrompt, setShowChapterPrompt] = useState(false);
@@ -101,6 +103,7 @@ const ReadingTimer = ({ book, onBack }) => {
 
             const summary = await generateSummary(metadata, localStorage.getItem('gemini_api_key'));
             setSummaryText(summary);
+            await saveSummary(book.id, chapterInput.trim(), summary);
         } catch (error) {
             console.error(error);
             if (error.message.includes('limit: 0')) {
@@ -132,6 +135,14 @@ const ReadingTimer = ({ book, onBack }) => {
                     >
                         <Sparkles size={16} />
                         <span className="hidden sm:inline">Summarize</span>
+                    </button>
+
+                    <button
+                        onClick={() => setShowNotes(true)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors mr-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50`}
+                    >
+                        <BookMarked size={16} />
+                        <span className="hidden sm:inline">Notes</span>
                     </button>
 
                     <button onClick={() => setShowSettings(true)} className="p-2 hover:opacity-70 rounded-full transition-colors text-gray-600 dark:text-gray-300">
@@ -283,6 +294,13 @@ const ReadingTimer = ({ book, onBack }) => {
             <SettingsModal
                 isOpen={showSettings}
                 onClose={() => setShowSettings(false)}
+            />
+
+            <NotesModal
+                isOpen={showNotes}
+                onClose={() => setShowNotes(false)}
+                bookId={book.id}
+                bookTitle={book.title}
             />
 
         </div>

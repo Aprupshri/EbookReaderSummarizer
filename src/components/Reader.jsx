@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import 'foliate-js/view.js';
-import { updateProgress, saveEbookSession, saveHighlight, getHighlights, deleteHighlight } from '../utils/storage';
+import { Overlayer } from 'foliate-js/overlayer.js';
+import { updateProgress, saveEbookSession, saveHighlight, getHighlights, deleteHighlight, saveSummary } from '../utils/storage';
 import { generateSummary } from '../utils/gemini';
 import { useReaderSettings } from '../utils/useReaderSettings';
-import { ArrowLeft, Settings, Sparkles, ChevronLeft, ChevronRight, Type, AlignJustify, Scroll, X, List, Highlighter, BookOpen } from 'lucide-react';
+import { ArrowLeft, Settings, Sparkles, ChevronLeft, ChevronRight, Type, AlignJustify, Scroll, X, List, Highlighter, BookOpen, BookMarked } from 'lucide-react';
 import SummaryModal from './SummaryModal';
 import SettingsModal from './SettingsModal';
 import DictionaryModal from './DictionaryModal';
+import NotesModal from './NotesModal';
 import { StatusBar, Style } from '@capacitor/status-bar';
 
 const Reader = ({ book, onBack }) => {
@@ -17,6 +19,7 @@ const Reader = ({ book, onBack }) => {
     const [showSettings, setShowSettings] = useState(false);
     const [showAppearance, setShowAppearance] = useState(false);
     const [showToc, setShowToc] = useState(false);
+    const [showNotes, setShowNotes] = useState(false);
     const [showControls, setShowControls] = useState(true);
     const [toc, setToc] = useState([]);
 
@@ -92,8 +95,8 @@ const Reader = ({ book, onBack }) => {
 
                 setIsReady(true);
 
-                // Load saved highlights
-                const savedHighlights = await getHighlights(book.id);
+                // Wait for the renderer to be ready before applying annotations is now handled
+                // by the 'load' event listener below.
 
             } catch (err) {
                 console.error("Foliate load error", err);
@@ -135,11 +138,33 @@ const Reader = ({ book, onBack }) => {
 
         view.addEventListener('relocate', handleRelocate);
 
-        const handleLoad = (e) => {
+        view.addEventListener('draw-annotation', e => {
+            const { draw, annotation } = e.detail;
+            const color = annotation.color || 'yellow';
+            draw(Overlayer.highlight, { color });
+        });
+
+        const handleLoad = async (e) => {
             const { doc, index } = e.detail;
 
             // Apply theme NOW — renderer is ready for this section
             updateTheme(view);
+
+            // Re-apply highlights for this newly loaded section
+            try {
+                const savedHighlights = await getHighlights(book.id);
+                if (savedHighlights && savedHighlights.length > 0) {
+                    for (const hl of savedHighlights) {
+                        try {
+                            view.addAnnotation({ value: hl.cfiRange, color: hl.color || 'yellow' });
+                        } catch (err) {
+                            // cfi might not belong to this index, foliate ignores it or throws, safely catch
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Could not load highlights for section", err);
+            }
 
             doc.addEventListener('selectionchange', () => {
                 const sel = doc.getSelection();
@@ -169,6 +194,7 @@ const Reader = ({ book, onBack }) => {
                         setShowAppearance(false);
                         setShowToc(false);
                         setShowSettings(false);
+                        setShowNotes(false);
                     }
                     return !prev;
                 });
@@ -353,6 +379,7 @@ const Reader = ({ book, onBack }) => {
 
             const summary = await generateSummary(metadata, apiKey);
             setSummaryText(summary);
+            await saveSummary(book.id, betterChapterTitle, summary);
         } catch (error) {
             console.error(error);
             if (error.message.includes('limit: 0')) {
@@ -374,6 +401,11 @@ const Reader = ({ book, onBack }) => {
             // foliate-js highlight implementation needs a custom overlayer integration
             console.log("Saving highlight: ", selection.word, selection.cfiRange);
             await saveHighlight(book.id, selection.cfiRange, selection.word, 'yellow');
+
+            // Visually apply it to foliate
+            if (viewerRef.current) {
+                viewerRef.current.addAnnotation({ value: selection.cfiRange, color: 'yellow' });
+            }
         } catch (e) {
             console.warn('Could not apply highlight', e);
         }
@@ -432,6 +464,16 @@ const Reader = ({ book, onBack }) => {
                     >
                         <Sparkles size={16} />
                         <span className="hidden sm:inline">Summarize</span>
+                    </button>
+
+                    <button
+                        onClick={() => setShowNotes(true)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors mr-2 ${theme === 'dark' ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/50' :
+                            'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            }`}
+                    >
+                        <BookMarked size={16} />
+                        <span className="hidden sm:inline">Notes</span>
                     </button>
 
                     <div className={`h-6 w-px mx-1 hidden md:block ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
@@ -715,6 +757,22 @@ const Reader = ({ book, onBack }) => {
             <SettingsModal
                 isOpen={showSettings}
                 onClose={() => setShowSettings(false)}
+            />
+
+            <NotesModal
+                isOpen={showNotes}
+                onClose={() => setShowNotes(false)}
+                bookId={book.id}
+                bookTitle={book.title}
+                onDeleteHighlight={(cfiRange) => {
+                    if (viewerRef.current) {
+                        try {
+                            viewerRef.current.deleteAnnotation({ value: cfiRange });
+                        } catch (e) {
+                            console.warn("Could not visually remove highlight", e);
+                        }
+                    }
+                }}
             />
 
             <DictionaryModal
