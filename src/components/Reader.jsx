@@ -7,6 +7,7 @@ import { ArrowLeft, Settings, Sparkles, ChevronLeft, ChevronRight, Type, AlignJu
 import SummaryModal from './SummaryModal';
 import SettingsModal from './SettingsModal';
 import DictionaryModal from './DictionaryModal';
+import { StatusBar, Style } from '@capacitor/status-bar';
 
 const Reader = ({ book, onBack }) => {
     const viewerRef = useRef(null);
@@ -23,13 +24,31 @@ const Reader = ({ book, onBack }) => {
     const [summaryText, setSummaryText] = useState('');
     const [loadError, setLoadError] = useState(null);
 
-    const [selection, setSelection] = useState(null); // { word, cfiRange }
+    const [selection, setSelection] = useState(null);
     const [showDictionary, setShowDictionary] = useState(false);
-    const selectionRef = useRef(null); // mirror selection for callbacks
+    const selectionRef = useRef(null);
 
-    // ✅ Persisted appearance settings
+    // ✅ Persisted appearance settings — must be before any useEffect that uses `theme`
     const { settings, update } = useReaderSettings();
     const { theme, fontSize, fontFamily, lineHeight, maxWidth, flow } = settings;
+
+    // Toggle Android status bar with the controls (immersive reading mode)
+    useEffect(() => {
+        const toggle = async () => {
+            try {
+                if (showControls) {
+                    await StatusBar.show();
+                    await StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light });
+                } else {
+                    await StatusBar.hide();
+                }
+            } catch (_) { /* no-op on web */ }
+        };
+        toggle();
+        // Restore status bar when leaving the reader
+        return () => { StatusBar.show().catch(() => { }); };
+    }, [showControls, theme]);
+
 
     // ✅ Session Tracking
     const sessionRef = useRef({
