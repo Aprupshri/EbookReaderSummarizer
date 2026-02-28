@@ -27,29 +27,43 @@ const Library = ({ onOpenBook, onOpenDashboard }) => {
 
         setIsUploading(true);
         try {
-            const book = ePub(file);
-            await book.ready;
-            const metadata = await book.loaded.metadata;
-
+            let title = file.name.replace(/\.(epub|pdf)$/i, '');
+            let author = 'Unknown Author';
             let coverBlob = null;
-            try {
-                const coverUrl = await book.coverUrl();
-                if (coverUrl) {
-                    const response = await fetch(coverUrl);
-                    coverBlob = await response.blob();
+            let type = file.name.endsWith('.pdf') ? 'pdf' : 'epub';
+
+            if (type === 'epub') {
+                try {
+                    const book = ePub(file);
+                    await book.ready;
+                    const metadata = await book.loaded.metadata;
+
+                    if (metadata.title) title = metadata.title;
+                    if (metadata.creator) author = metadata.creator;
+
+                    try {
+                        const coverUrl = await book.coverUrl();
+                        if (coverUrl) {
+                            const response = await fetch(coverUrl);
+                            coverBlob = await response.blob();
+                        }
+                    } catch (err) {
+                        console.warn('Could not extract cover', err);
+                    }
+                } catch (err) {
+                    console.warn('Failed to parse EPUB metadata:', err);
                 }
-            } catch (err) {
-                console.warn('Could not extract cover', err);
             }
 
             const newBook = {
                 id: Date.now().toString(),
-                title: metadata.title || file.name.replace('.epub', ''),
-                author: metadata.creator || 'Unknown Author',
+                title: title,
+                author: author,
                 file: file,
                 cover: coverBlob,
                 cfi: null,
                 lastRead: Date.now(),
+                format: type,
             };
 
             await saveBook(newBook);
@@ -102,10 +116,10 @@ const Library = ({ onOpenBook, onOpenDashboard }) => {
                     </button>
                     <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors shadow-sm">
                         <Plus size={20} />
-                        <span className="hidden sm:inline">Upload EPUB</span>
+                        <span className="hidden sm:inline">Upload Book</span>
                         <input
                             type="file"
-                            accept=".epub"
+                            accept=".epub,.pdf"
                             onChange={handleFileUpload}
                             className="hidden"
                             disabled={isUploading}

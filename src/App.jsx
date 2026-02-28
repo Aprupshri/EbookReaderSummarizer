@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Library from './components/Library';
 import Reader from './components/Reader';
+import PdfViewer from './components/PdfViewer';
 import ReadingTimer from './components/ReadingTimer';
 import Dashboard from './components/Dashboard';
 
@@ -25,6 +26,11 @@ function App() {
       ) : currentBook ? (
         currentBook.type === 'physical' ? (
           <ReadingTimer
+            book={currentBook}
+            onBack={() => setCurrentBook(null)}
+          />
+        ) : currentBook.format === 'pdf' ? (
+          <PdfViewer
             book={currentBook}
             onBack={() => setCurrentBook(null)}
           />

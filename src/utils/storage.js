@@ -84,12 +84,12 @@ export const deleteBook = async (id) => {
   return db.delete(STORE_NAME, id);
 };
 
-export const saveHighlight = async (bookId, cfiRange, text, color = 'yellow') => {
+export const saveHighlight = async (bookId, cfiRange, text, color = 'yellow', note = '') => {
   const db = await initDB();
   const book = await db.get(STORE_NAME, bookId);
   if (book) {
     if (!book.highlights) book.highlights = [];
-    book.highlights.push({ cfiRange, text, color, timestamp: Date.now() });
+    book.highlights.push({ cfiRange, text, color, note, timestamp: Date.now() });
     await db.put(STORE_NAME, book);
   }
 };
@@ -130,6 +130,58 @@ export const deleteSummary = async (bookId, timestamp) => {
   const book = await db.get(STORE_NAME, bookId);
   if (book && book.summaries) {
     book.summaries = book.summaries.filter(s => s.timestamp !== timestamp);
+    await db.put(STORE_NAME, book);
+  }
+};
+
+// ── Genre / Curiosity Nudge ───────────────────────────────────────────────────
+
+/** Sets the genre of a book ('fiction' | 'nonfiction'). */
+export const setBookGenre = async (bookId, genre) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (book) {
+    book.genre = genre;
+    await db.put(STORE_NAME, book);
+  }
+};
+
+/** Saves a new pre-session prediction / learning intention. */
+export const savePrediction = async (bookId, text, genre) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (book) {
+    if (!book.predictions) book.predictions = [];
+    book.predictions.push({ text, genre, outcome: null, timestamp: Date.now() });
+    await db.put(STORE_NAME, book);
+  }
+};
+
+/** Returns all predictions for a book. */
+export const getPredictions = async (bookId) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  return book ? (book.predictions || []) : [];
+};
+
+/** Updates the outcome of the most-recent open prediction. */
+export const updatePredictionOutcome = async (bookId, timestamp, outcome) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (book && book.predictions) {
+    book.predictions = book.predictions.map(p =>
+      p.timestamp === timestamp ? { ...p, outcome } : p
+    );
+    await db.put(STORE_NAME, book);
+  }
+};
+
+/** Deletes a prediction by timestamp. */
+export const deletePrediction = async (bookId, timestamp) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (book && book.predictions) {
+    book.predictions = book.predictions.filter(p => p.timestamp !== timestamp);
     await db.put(STORE_NAME, book);
   }
 };

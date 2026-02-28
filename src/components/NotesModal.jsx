@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { X, Trash2, Edit3, AlignLeft, BookMarked, MessageSquare } from 'lucide-react';
-import { getHighlights, deleteHighlight, getSummaries, deleteSummary } from '../utils/storage';
+import { X, Trash2, Edit3, AlignLeft, BookMarked, MessageSquare, Sparkles, Brain } from 'lucide-react';
+import { getHighlights, deleteHighlight, getSummaries, deleteSummary, getPredictions, deletePrediction } from '../utils/storage';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 
 const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onClickHighlight }) => {
-    const [activeTab, setActiveTab] = useState('highlights'); // 'highlights' or 'summaries'
+    const [activeTab, setActiveTab] = useState('highlights'); // 'highlights' | 'explanations' | 'summaries'
     const [highlights, setHighlights] = useState([]);
     const [summaries, setSummaries] = useState([]);
+    const [predictions, setPredictions] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const loadNotes = async () => {
@@ -17,6 +19,9 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
 
             const s = await getSummaries(bookId);
             setSummaries(s.sort((a, b) => b.timestamp - a.timestamp));
+
+            const p = await getPredictions(bookId);
+            setPredictions(p.sort((a, b) => b.timestamp - a.timestamp));
         } catch (e) {
             console.error('Failed to load notes', e);
         }
@@ -44,11 +49,35 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
         await loadNotes();
     };
 
+    const handleDeletePrediction = async (timestamp) => {
+        if (!window.confirm('Delete this prediction?')) return;
+        await deletePrediction(bookId, timestamp);
+        await loadNotes();
+    };
+
     const formatDate = (ts) => {
         return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
     };
 
+    // Partition highlights
+    const regularHighlights = highlights.filter(h => !h.note);
+    const explanations = highlights.filter(h => h.note);
+
+    const OUTCOME_LABELS = {
+        yes: { emoji: '✅', label: 'Correct' },
+        partly: { emoji: '〰️', label: 'Partly' },
+        no: { emoji: '❌', label: 'Wrong' },
+        noyet: { emoji: '📖', label: 'Not yet' },
+    };
+
     if (!isOpen) return null;
+
+    const TABS = [
+        { key: 'highlights', label: 'Highlights', count: regularHighlights.length, icon: <Edit3 size={16} />, activeColor: 'border-yellow-500 text-yellow-600 dark:text-yellow-400' },
+        { key: 'explanations', label: 'Explanations', count: explanations.length, icon: <Sparkles size={16} />, activeColor: 'border-purple-500 text-purple-600 dark:text-purple-400' },
+        { key: 'predictions', label: 'Predictions', count: predictions.length, icon: <Brain size={16} />, activeColor: 'border-indigo-500 text-indigo-600 dark:text-indigo-400' },
+        { key: 'summaries', label: 'Summaries', count: summaries.length, icon: <AlignLeft size={16} />, activeColor: 'border-blue-500 text-blue-600 dark:text-blue-400' },
+    ];
 
     return (
         <AnimatePresence>
@@ -58,10 +87,10 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden border border-gray-100 dark:border-gray-700"
+                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col min-h-0 overflow-hidden border border-gray-100 dark:border-gray-700"
                 >
                     {/* Header */}
-                    <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                    <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
                         <div className="flex items-center gap-3">
                             <BookMarked className="text-blue-500" size={24} />
                             <div>
@@ -78,56 +107,48 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex border-b border-gray-100 dark:border-gray-700 px-4 pt-2 gap-2 bg-gray-50/50 dark:bg-gray-800/50">
-                        <button
-                            onClick={() => setActiveTab('highlights')}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'highlights'
-                                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            <Edit3 size={16} />
-                            Highlights ({highlights.length})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('summaries')}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'summaries'
-                                ? 'border-purple-500 text-purple-600 dark:text-purple-400'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            <AlignLeft size={16} />
-                            Summaries ({summaries.length})
-                        </button>
+                    <div className="flex-shrink-0 flex border-b border-gray-100 dark:border-gray-700 px-4 pt-2 pb-px gap-2 bg-gray-50/50 dark:bg-gray-800/50 overflow-x-auto hide-scrollbar">
+                        {TABS.map(tab => (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${activeTab === tab.key
+                                    ? tab.activeColor
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                {tab.icon}
+                                {tab.label} ({tab.count})
+                            </button>
+                        ))}
                     </div>
 
                     {/* Content Area */}
-                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/50">
+                    <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/50">
                         {loading ? (
                             <div className="flex justify-center items-center h-40">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                             </div>
+
                         ) : activeTab === 'highlights' ? (
+                            /* ── Regular Highlights ─────────────────────────────── */
                             <div className="space-y-4">
-                                {highlights.length === 0 ? (
+                                {regularHighlights.length === 0 ? (
                                     <div className="text-center py-10 text-gray-500 dark:text-gray-400 flex flex-col items-center">
                                         <Edit3 size={32} className="mb-3 opacity-20" />
                                         <p>No highlights yet.</p>
                                         <p className="text-sm mt-1 opacity-70">Select text while reading to add one.</p>
                                     </div>
                                 ) : (
-                                    highlights.map((h, i) => (
+                                    regularHighlights.map((h, i) => (
                                         <div
                                             key={i}
-                                            onClick={() => onClickHighlight && onClickHighlight(h.cfiRange)}
+                                            onClick={() => h.cfiRange && onClickHighlight && onClickHighlight(h.cfiRange)}
                                             className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 group relative cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
                                         >
                                             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteHighlight(h.cfiRange);
-                                                    }}
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteHighlight(h.cfiRange); }}
                                                     className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md transition-colors"
                                                     title="Delete Highlight"
                                                 >
@@ -147,7 +168,97 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
                                     ))
                                 )}
                             </div>
+
+                        ) : activeTab === 'explanations' ? (
+                            /* ── AI Explanations ─────────────────────────────────── */
+                            <div className="space-y-4">
+                                {explanations.length === 0 ? (
+                                    <div className="text-center py-10 text-gray-500 dark:text-gray-400 flex flex-col items-center">
+                                        <Sparkles size={32} className="mb-3 opacity-20" />
+                                        <p>No AI explanations saved yet.</p>
+                                        <p className="text-sm mt-1 opacity-70">Select text → tap Explain → tap Save.</p>
+                                    </div>
+                                ) : (
+                                    explanations.map((h, i) => (
+                                        <div key={i} className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-sm border border-purple-100 dark:border-purple-900/30 group relative">
+                                            <div className="w-1 h-full absolute left-0 top-0 bottom-0 bg-purple-400 opacity-60"></div>
+                                            <div className="pl-5 pr-10 pt-4 pb-4">
+                                                {/* Delete btn */}
+                                                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button
+                                                        onClick={() => handleDeleteHighlight(h.cfiRange)}
+                                                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md transition-colors"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+
+                                                {/* Selected quote */}
+                                                <blockquote className="border-l-2 border-purple-300 dark:border-purple-600 pl-3 text-sm italic text-gray-500 dark:text-gray-400 leading-relaxed mb-3">
+                                                    "{h.text}"
+                                                </blockquote>
+
+                                                {/* AI explanation card */}
+                                                <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/30 px-4 py-3">
+                                                    <div className="flex items-center gap-1.5 mb-2">
+                                                        <Sparkles size={13} className="text-purple-500" />
+                                                        <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">AI Explanation</span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{h.note}</p>
+                                                </div>
+
+                                                <div className="mt-3 text-xs text-gray-400 dark:text-gray-500">
+                                                    {formatDate(h.timestamp)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                        ) : activeTab === 'predictions' ? (
+                            /* ── Predictions / Learning Journal ───────────────── */
+                            <div className="space-y-4">
+                                {predictions.length === 0 ? (
+                                    <div className="text-center py-10 text-gray-500 dark:text-gray-400 flex flex-col items-center">
+                                        <Brain size={32} className="mb-3 opacity-20" />
+                                        <p>No predictions yet.</p>
+                                        <p className="text-sm mt-1 opacity-70">Appear after a Recall card — Fiction & Non-Fiction.</p>
+                                    </div>
+                                ) : (
+                                    predictions.map((p, i) => {
+                                        const outcomeData = p.outcome ? OUTCOME_LABELS[p.outcome] : null;
+                                        const isFiction = p.genre === 'fiction';
+                                        return (
+                                            <div key={i} className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border group relative ${isFiction ? 'border-indigo-100 dark:border-indigo-900/30' : 'border-emerald-100 dark:border-emerald-900/30'}`}>
+                                                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => handleDeletePrediction(p.timestamp)} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                                <div className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide mb-2 ${isFiction ? 'text-indigo-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                    <Brain size={12} />
+                                                    {isFiction ? 'Prediction' : 'Learning Intention'}
+                                                </div>
+                                                <p className="text-sm text-gray-800 dark:text-gray-100 leading-relaxed italic mb-3 pr-6">"{p.text}"</p>
+                                                <div className="flex items-center justify-between">
+                                                    {outcomeData ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                                                            {outcomeData.emoji} {outcomeData.label}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 italic">Outcome pending…</span>
+                                                    )}
+                                                    <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(p.timestamp)}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+
                         ) : (
+                            /* ── Summaries ───────────────────────────────────────── */
                             <div className="space-y-4">
                                 {summaries.length === 0 ? (
                                     <div className="text-center py-10 text-gray-500 dark:text-gray-400 flex flex-col items-center">
@@ -157,9 +268,9 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
                                     </div>
                                 ) : (
                                     summaries.map((s, i) => (
-                                        <div key={i} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-purple-100 dark:border-purple-900/30 group relative">
+                                        <div key={i} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-blue-100 dark:border-blue-900/30 group relative">
                                             <div className="flex justify-between items-start mb-3">
-                                                <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400 font-medium">
+                                                <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium">
                                                     <MessageSquare size={16} />
                                                     <span className="truncate max-w-[200px] sm:max-w-sm">{s.chapterName}</span>
                                                 </div>
@@ -175,12 +286,9 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
                                                 </div>
                                             </div>
 
-                                            <div
-                                                className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300"
-                                                dangerouslySetInnerHTML={{
-                                                    __html: s.text.replace(/\n\n/g, '<br/><br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                                }}
-                                            />
+                                            <div className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
+                                                <ReactMarkdown>{s.text}</ReactMarkdown>
+                                            </div>
                                         </div>
                                     ))
                                 )}
