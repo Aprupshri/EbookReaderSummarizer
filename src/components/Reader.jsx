@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import 'foliate-js/view.js';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X } from 'lucide-react';
-import { useReader } from './Reader/useReader';
-
+import React, { useEffect, useRef, useState } from 'react';
+import ePub from 'epubjs';
+import { updateProgress, saveEbookSession } from '../utils/storage';
+import { generateSummary, getAISettings, PROVIDERS } from '../utils/ai';
+import { useReaderSettings } from '../utils/useReaderSettings';
+import { ArrowLeft, Settings, Sparkles, ChevronLeft, ChevronRight, Type, AlignJustify, Scroll, X, List } from 'lucide-react';
 import SummaryModal from './SummaryModal';
 import RecallModal from './RecallModal';
 import ExplainModal from './ExplainModal';
@@ -157,42 +157,61 @@ const Reader = ({ book, onBack }) => {
                 )}
             </div>
 
-            <TocSidebar
-                showToc={showToc}
-                setShowToc={setShowToc}
-                theme={theme}
-                toc={toc}
-                onNavigate={async (href) => {
-                    const v = viewerRef.current;
-                    if (!v) return;
+    const handleSummarize = async () => {
+        const aiSettings = getAISettings();
+        const providerConfig = PROVIDERS.find((p) => p.id === aiSettings.provider);
+        if (providerConfig?.requiresApiKey && !aiSettings.apiKey) {
+            setShowSettings(true);
+            return;
+        }
 
-                    if (href === 'next') {
-                        v.next();
-                        return;
-                    }
-                    if (href === 'prev') {
-                        v.prev();
-                        return;
-                    }
+        setShowSummary(true);
+        setSummaryLoading(true);
+        setSummaryText('');
 
-                    try {
-                        await new Promise(r => setTimeout(r, 100));
-                        await viewerRef.current.goTo(href);
-                    } catch (err) {
-                        if (typeof href === 'string' && href.includes('#')) {
-                            try {
-                                const base = href.split('#')[0];
-                                await viewerRef.current.goTo(base);
-                            } catch (fallbackErr) {
-                            }
-                        }
-                    }
-                }}
-                bookTitle={book.title}
-                bookId={book.id}
-                location={location}
-                viewerRef={viewerRef}
-            />
+        try {
+            const currentLocation = renditionRef.current.location.start;
+            const epubBook = bookRef.current;
+            const chapterItem = epubBook.spine.get(currentLocation.cfi);
+            const chapterName = chapterItem.href;
+
+            let betterChapterTitle = chapterName;
+            let previousChapters = [];
+
+            const toc = epubBook.navigation.toc;
+            const currentChapterIndex = toc.findIndex(item => item.href.includes(chapterItem.href));
+
+            if (currentChapterIndex !== -1) {
+                betterChapterTitle = toc[currentChapterIndex].label;
+                previousChapters = toc.slice(0, currentChapterIndex).map(item => item.label);
+            }
+
+            const anchors = await extractChapterAnchors(epubBook, chapterItem.href);
+
+            const metadata = {
+                title: book.title,
+                author: book.author,
+                chapterName: betterChapterTitle,
+                progress: currentLocation.percentage,
+                previousChapters,
+                anchors,
+            };
+
+            const summary = await generateSummary(metadata);
+            setSummaryText(summary);
+        } catch (error) {
+            console.error(error);
+            if (error.message.includes('limit: 0')) {
+                setSummaryText('**API Key Issue:** Your AI API key may be invalid or restricted. Please verify your AI provider settings.');
+            } else if (error.message.includes('Too many requests')) {
+                setSummaryText(`🚦 **Slow down:** ${error.message}`);
+            } else {
+                setSummaryText(`Error: ${error.message}. Please check your AI settings.`);
+            }
+        } finally {
+            setSummaryLoading(false);
+        }
+    };
 
             <ReaderFooter
                 showControls={showControls}

@@ -276,6 +276,27 @@ const Library = ({ onOpenBook, onOpenDashboard, onOpenCommonplace, onOpenKnowled
                                 <X size={14} />
                             </button>
                         </div>
+
+                        <div className="p-4">
+                            <h3 className="font-semibold text-gray-900 dark:text-white truncate" title={book.title}>
+                                {book.title}
+                            </h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                {book.author}
+                            </p>
+                            {book.rating && (
+                                <div className="mt-2 text-xs">
+                                    <span className="inline-flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-100 px-2 py-1 rounded">
+                                        ⭐ {book.rating.toFixed(1)} <span className="text-gray-500 dark:text-gray-400">({book.ratingCount})</span>
+                                    </span>
+                                </div>
+                            )}
+                            {book.cfi && (
+                                <div className="mt-2 text-xs text-blue-600 font-medium">
+                                    In Progress
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
