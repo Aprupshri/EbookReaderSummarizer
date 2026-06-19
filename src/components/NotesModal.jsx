@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { X, Trash2, Edit3, AlignLeft, BookMarked, MessageSquare, Sparkles } from 'lucide-react';
+import { X, Trash2, Edit3, AlignLeft, BookMarked, MessageSquare } from 'lucide-react';
 import { getHighlights, deleteHighlight, getSummaries, deleteSummary } from '../utils/storage';
-import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 
+const formatDate = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
 const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onClickHighlight }) => {
-    const [activeTab, setActiveTab] = useState('highlights'); // 'highlights' | 'summaries'
+    const [activeTab, setActiveTab] = useState('highlights');
     const [highlights, setHighlights] = useState([]);
     const [summaries, setSummaries] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -16,29 +16,19 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
         try {
             const h = await getHighlights(bookId);
             setHighlights(h.sort((a, b) => b.timestamp - a.timestamp));
-
             const s = await getSummaries(bookId);
             setSummaries(s.sort((a, b) => b.timestamp - a.timestamp));
-        } catch (e) {
-            console.error('Failed to load notes', e);
-        }
+        } catch {}
         setLoading(false);
     };
 
-    useEffect(() => {
-        if (isOpen && bookId) {
-            loadNotes();
-        }
-    }, [isOpen, bookId]);
-
+    useEffect(() => { if (isOpen && bookId) loadNotes(); }, [isOpen, bookId]);
 
     const handleDeleteHighlight = async (cfiRange) => {
         if (!window.confirm('Delete this highlight?')) return;
         await deleteHighlight(bookId, cfiRange);
         await loadNotes();
-        if (onDeleteHighlight) {
-            onDeleteHighlight(cfiRange);
-        }
+        onDeleteHighlight?.(cfiRange);
     };
 
     const handleDeleteSummary = async (timestamp) => {
@@ -47,159 +37,131 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
         await loadNotes();
     };
 
-    const handleDeletePrediction = async (timestamp) => {
-        if (!window.confirm('Delete this prediction?')) return;
-        await deletePrediction(bookId, timestamp);
-        await loadNotes();
-    };
-
-    const formatDate = (ts) => {
-        return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-    };
-
-
     const regularHighlights = highlights.filter(h => !h.note);
 
     if (!isOpen) return null;
 
     const TABS = [
-        { key: 'highlights', label: 'Highlights', count: regularHighlights.length, icon: <Edit3 size={16} />, activeColor: 'border-yellow-500 text-yellow-600 dark:text-yellow-400' },
-        { key: 'summaries', label: 'Summaries', count: summaries.length, icon: <AlignLeft size={16} />, activeColor: 'border-blue-500 text-blue-600 dark:text-blue-400' },
+        { key: 'highlights', label: 'Highlights', count: regularHighlights.length },
+        { key: 'summaries',  label: 'Summaries',  count: summaries.length },
     ];
 
-
     return (
-        <AnimatePresence>
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col min-h-0 overflow-hidden border border-gray-100 dark:border-gray-700"
-                >
-                    {/* Header */}
-                    <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-                        <div className="flex items-center gap-3">
-                            <BookMarked className="text-blue-500" size={24} />
-                            <div>
-                                <h2 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">Notes & Highlights</h2>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px] sm:max-w-xs">{bookTitle}</p>
-                            </div>
+        <div className="ath-overlay" style={{ zIndex: 120 }} onClick={onClose}>
+            <div
+                className="ath-modal ath-modal--center"
+                style={{ maxWidth: 680 }}
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="ath-modal-head">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <BookMarked size={18} style={{ color: 'var(--accent)' }} />
+                        <div>
+                            <h2 className="serif">Notes &amp; Highlights</h2>
+                            <div className="label-cat" style={{ textTransform: 'none', letterSpacing: 0, marginTop: 2 }}>{bookTitle}</div>
                         </div>
+                    </div>
+                    <button className="ath-iconbtn" onClick={onClose}><X size={18} /></button>
+                </div>
+
+                {/* Tabs */}
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+                    {TABS.map(tab => (
                         <button
-                            onClick={onClose}
-                            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`ath-toc-tab${activeTab === tab.key ? ' is-on' : ''}`}
                         >
-                            <X size={20} />
+                            {tab.label} ({tab.count})
                         </button>
-                    </div>
+                    ))}
+                </div>
 
-                    {/* Tabs */}
-                    <div className="flex-shrink-0 flex border-b border-gray-100 dark:border-gray-700 px-4 pt-2 pb-px gap-2 bg-gray-50/50 dark:bg-gray-800/50 overflow-x-auto hide-scrollbar">
-                        {TABS.map(tab => (
-                            <button
-                                key={tab.key}
-                                onClick={() => setActiveTab(tab.key)}
-                                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${activeTab === tab.key
-                                    ? tab.activeColor
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                                    }`}
-                            >
-                                {tab.icon}
-                                {tab.label} ({tab.count})
-                            </button>
-                        ))}
-                    </div>
+                {/* Content */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: 20, background: 'var(--surface-2)' }}>
+                    {loading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid var(--line)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite' }} />
+                        </div>
 
-                    {/* Content Area */}
-                    <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900/50">
-                        {loading ? (
-                            <div className="flex justify-center items-center h-40">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                            </div>
-
-                        ) : activeTab === 'highlights' ? (
-                            /* ── Regular Highlights ─────────────────────────────── */
-                            <div className="space-y-4">
-                                {regularHighlights.length === 0 ? (
-                                    <div className="text-center py-10 text-gray-500 dark:text-gray-400 flex flex-col items-center">
-                                        <Edit3 size={32} className="mb-3 opacity-20" />
-                                        <p>No highlights yet.</p>
-                                        <p className="text-sm mt-1 opacity-70">Select text while reading to add one.</p>
-                                    </div>
-                                ) : (
-                                    regularHighlights.map((h, i) => (
-                                        <div
-                                            key={i}
-                                            onClick={() => h.cfiRange && onClickHighlight && onClickHighlight(h.cfiRange)}
-                                            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 group relative cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+                    ) : activeTab === 'highlights' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {regularHighlights.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-faint)' }}>
+                                    <Edit3 size={28} style={{ margin: '0 auto 10px', opacity: .3 }} />
+                                    <p style={{ fontSize: 14 }}>No highlights yet.</p>
+                                    <p style={{ fontSize: 13, marginTop: 4, opacity: .7 }}>Select text while reading to add one.</p>
+                                </div>
+                            ) : regularHighlights.map((h, i) => (
+                                <div
+                                    key={i}
+                                    onClick={() => h.cfiRange && onClickHighlight?.(h.cfiRange)}
+                                    style={{
+                                        background: 'var(--surface)', border: '1px solid var(--line)',
+                                        borderRadius: 'var(--r-md)', padding: '14px 16px',
+                                        cursor: 'pointer', position: 'relative',
+                                        borderLeft: '3px solid var(--accent)',
+                                    }}
+                                >
+                                    <blockquote className="serif" style={{ fontSize: 15, lineHeight: 1.6, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 8 }}>
+                                        "{h.text}"
+                                    </blockquote>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <span className="label-cat" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
+                                            {formatDate(h.timestamp)}
+                                        </span>
+                                        <button
+                                            onClick={e => { e.stopPropagation(); handleDeleteHighlight(h.cfiRange); }}
+                                            className="ath-iconbtn"
+                                            style={{ width: 28, height: 28, opacity: .4 }}
+                                            title="Delete"
                                         >
-                                            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDeleteHighlight(h.cfiRange); }}
-                                                    className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md transition-colors"
-                                                    title="Delete Highlight"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                            <div className="pr-10">
-                                                <div className="w-1 h-full absolute left-0 top-0 bottom-0 bg-yellow-400 rounded-l-xl opacity-50"></div>
-                                                <blockquote className="pl-3 py-1 border-l-2 border-yellow-200 dark:border-yellow-700 text-gray-800 dark:text-gray-200 text-[15px] leading-relaxed italic mb-3">
-                                                    "{h.text}"
-                                                </blockquote>
-                                                <div className="flex items-center text-xs text-gray-400 dark:text-gray-500 pl-3">
-                                                    <span>{formatDate(h.timestamp)}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-
-                        ) : (
-                            /* ── Summaries ───────────────────────────────────────── */
-
-                            <div className="space-y-4">
-                                {summaries.length === 0 ? (
-                                    <div className="text-center py-10 text-gray-500 dark:text-gray-400 flex flex-col items-center">
-                                        <AlignLeft size={32} className="mb-3 opacity-20" />
-                                        <p>No summaries generated.</p>
-                                        <p className="text-sm mt-1 opacity-70">Use the Sparkles icon to summarize chapters.</p>
+                                            <Trash2 size={13} />
+                                        </button>
                                     </div>
-                                ) : (
-                                    summaries.map((s, i) => (
-                                        <div key={i} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-blue-100 dark:border-blue-900/30 group relative">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-medium">
-                                                    <MessageSquare size={16} />
-                                                    <span className="truncate max-w-[200px] sm:max-w-sm">{s.chapterName}</span>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(s.timestamp)}</span>
-                                                    <button
-                                                        onClick={() => handleDeleteSummary(s.timestamp)}
-                                                        className="p-1 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        title="Delete Summary"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </div>
+                                </div>
+                            ))}
+                        </div>
 
-                                            <div className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
-                                                <ReactMarkdown>{s.text}</ReactMarkdown>
-                                            </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {summaries.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-faint)' }}>
+                                    <AlignLeft size={28} style={{ margin: '0 auto 10px', opacity: .3 }} />
+                                    <p style={{ fontSize: 14 }}>No summaries generated.</p>
+                                    <p style={{ fontSize: 13, marginTop: 4, opacity: .7 }}>Use the Summarize button while reading.</p>
+                                </div>
+                            ) : summaries.map((s, i) => (
+                                <div
+                                    key={i}
+                                    style={{
+                                        background: 'var(--surface)', border: '1px solid var(--line)',
+                                        borderRadius: 'var(--r-md)', padding: '14px 16px',
+                                        borderLeft: '3px solid var(--accent-soft)',
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent-ink)', fontSize: 13, fontWeight: 550 }}>
+                                            <MessageSquare size={14} />
+                                            <span style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.chapterName}</span>
                                         </div>
-                                    ))
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </motion.div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                            <span className="label-cat" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>{formatDate(s.timestamp)}</span>
+                                            <button className="ath-iconbtn" style={{ width: 28, height: 28, opacity: .4 }} onClick={() => handleDeleteSummary(s.timestamp)}>
+                                                <Trash2 size={13} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink)' }}>
+                                        <ReactMarkdown>{s.text}</ReactMarkdown>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
-        </AnimatePresence>
+        </div>
     );
 };
 

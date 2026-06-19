@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, Key, Save, ExternalLink } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { getAISettings, saveAISettings, PROVIDERS } from '../utils/ai';
 
 const SettingsModal = ({ isOpen, onClose }) => {
@@ -39,134 +38,100 @@ const SettingsModal = ({ isOpen, onClose }) => {
     const modelOptions = providerConfig?.models ?? [];
 
     return (
-        <AnimatePresence>
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-gray-200 dark:border-gray-700 m-4"
-                >
-                    <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
-                        <h2 className="font-semibold text-lg text-gray-800 dark:text-white">AI Settings</h2>
-                        <button
-                            onClick={onClose}
-                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors text-gray-500"
+        <div className="ath-overlay" onClick={onClose}>
+            <div className="ath-modal ath-modal--center" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+                <div className="ath-modal-head">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Key size={16} style={{ color: 'var(--accent)' }} />
+                        <h2 className="serif">AI Settings</h2>
+                    </div>
+                    <button className="ath-iconbtn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+                </div>
+
+                <div className="ath-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+                    <div>
+                        <div className="label-cat" style={{ marginBottom: 8 }}>AI Provider</div>
+                        <select
+                            value={provider}
+                            onChange={(e) => handleProviderChange(e.target.value)}
+                            className="ath-input"
                         >
-                            <X size={20} />
-                        </button>
+                            {PROVIDERS.map((p) => (
+                                <option key={p.id} value={p.id}>{p.label}</option>
+                            ))}
+                        </select>
                     </div>
 
-                    <div className="p-6 space-y-5 overflow-y-auto">
+                    {provider !== 'ollama' && modelOptions.length > 0 && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                                <Layers size={16} />
-                                AI Provider
-                            </label>
+                            <div className="label-cat" style={{ marginBottom: 8 }}>Model</div>
                             <select
-                                value={provider}
-                                onChange={(e) => handleProviderChange(e.target.value)}
-                                className="w-full p-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={model}
+                                onChange={(e) => setModel(e.target.value)}
+                                className="ath-input"
                             >
-                                {PROVIDERS.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.label}
-                                    </option>
+                                {modelOptions.map((m) => (
+                                    <option key={m} value={m}>{m}</option>
                                 ))}
                             </select>
                         </div>
+                    )}
 
-                        {provider !== 'ollama' ? (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Model</label>
-                                <select
-                                    value={model}
-                                    onChange={(e) => setModel(e.target.value)}
-                                    className="w-full p-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    {provider === 'ollama' && (
+                        <div style={{ padding: '12px 14px', borderRadius: 'var(--r-md)', background: 'var(--accent-soft)', color: 'var(--accent-ink)', fontSize: 13, lineHeight: 1.55 }}>
+                            Uses whatever model is running on your Ollama instance.
+                            Run <code style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,.08)', padding: '1px 5px', borderRadius: 3 }}>ollama serve model-name</code> to change it.
+                        </div>
+                    )}
+
+                    {providerConfig?.requiresApiKey && (
+                        <div>
+                            <div className="label-cat" style={{ marginBottom: 8 }}>{providerConfig.apiKeyLabel}</div>
+                            <input
+                                type="password"
+                                value={apiKey}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                placeholder="Paste your API key here…"
+                                className="ath-input"
+                            />
+                            <p style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-faint)' }}>
+                                {providerConfig.apiKeyHelp}{' '}
+                                <a
+                                    href={providerConfig.apiKeyHelpUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: 'var(--accent-ink)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 3 }}
                                 >
-                                    {modelOptions.map((option) => (
-                                        <option key={option} value={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        ) : (
-                            <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                                <p className="text-sm text-blue-900 dark:text-blue-200">
-                                    <strong>Model:</strong> Uses whatever model is currently running on your Ollama instance. Run <code className="bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded text-xs">ollama serve model-name</code> to change it.
-                                </p>
-                                <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                                    Available models: llama3.2, llama3.1, mistral, gemma3, phi4, and more
-                                </p>
-                            </div>
-                        )}
+                                    {providerConfig.apiKeyHelpUrl.replace('https://', '')} <ExternalLink size={11} />
+                                </a>
+                            </p>
+                        </div>
+                    )}
 
-                        {providerConfig?.requiresApiKey && (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                                    <Key size={16} />
-                                    {providerConfig.apiKeyLabel}
-                                </label>
-                                <input
-                                    type="password"
-                                    value={apiKey}
-                                    onChange={(e) => setApiKey(e.target.value)}
-                                    placeholder="Enter your API key"
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                    {providerConfig.apiKeyHelp}{' '}
-                                    <a
-                                        href={providerConfig.apiKeyHelpUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:underline"
-                                    >
-                                        Learn more
-                                    </a>
-                                </p>
-                            </div>
-                        )}
+                    {providerConfig?.requiresBaseUrl && (
+                        <div>
+                            <div className="label-cat" style={{ marginBottom: 8 }}>Ollama Base URL</div>
+                            <input
+                                type="text"
+                                value={ollamaBaseUrl}
+                                onChange={(e) => setOllamaBaseUrl(e.target.value)}
+                                placeholder="http://localhost:11434"
+                                className="ath-input"
+                            />
+                        </div>
+                    )}
 
-                        {providerConfig?.requiresBaseUrl && (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Ollama Base URL
-                                </label>
-                                <input
-                                    type="text"
-                                    value={ollamaBaseUrl}
-                                    onChange={(e) => setOllamaBaseUrl(e.target.value)}
-                                    placeholder="http://localhost:11434"
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                    {providerConfig.apiKeyHelp}{' '}
-                                    <a
-                                        href={providerConfig.apiKeyHelpUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:underline"
-                                    >
-                                        Learn more
-                                    </a>
-                                </p>
-                            </div>
-                        )}
-
-                        <button
-                            onClick={handleSave}
-                            className={`w-full py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
-                                saved ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
-                            }`}
-                        >
-                            {saved ? <>Saved!</> : <><Save size={18} /> Save Settings</>}
-                        </button>
-                    </div>
-                </motion.div>
+                    <button
+                        onClick={handleSave}
+                        className="ath-btn ath-btn--primary ath-btn--md"
+                        style={{ width: '100%', justifyContent: 'center', ...(saved ? { background: 'var(--success, #2f9e44)' } : {}) }}
+                    >
+                        {saved ? '✓ Saved!' : <><Save size={16} /><span>Save Settings</span></>}
+                    </button>
+                </div>
             </div>
-        </AnimatePresence>
+        </div>
     );
 };
 

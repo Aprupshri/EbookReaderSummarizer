@@ -1,481 +1,431 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ePub from 'epubjs';
 import { saveBook, getBooks, deleteBook } from '../utils/storage';
-import { getStreakData } from '../utils/streaks';
-import { Book, Plus, Trash2, BookPlus, Flame, BarChart2, Settings, Key, X, BookMarked, Brain, Edit2, Search, Compass, Check } from 'lucide-react';
+import { Search, Plus, Trash2, BookPlus, Compass, Settings, Key, X, BookOpen, BookMarked, Upload } from 'lucide-react';
+import BookCover from './BookCover';
 import AddPhysicalBook from './AddPhysicalBook';
 import SettingsModal from './SettingsModal';
-import ProductTour from './ProductTour';
 import DiscoverModal from './DiscoverModal';
-import AddOptionsFab from './AddOptionsFab';
 
-const Library = ({ onOpenBook, onOpenDashboard, onOpenCommonplace, onOpenKnowledgeBase }) => {
+const FILTERS = [
+  { value: 'all',      label: 'All'      },
+  { value: 'reading',  label: 'Reading'  },
+  { value: 'ebook',    label: 'E-books'  },
+  { value: 'physical', label: 'Physical' },
+  { value: 'finished', label: 'Finished' },
+];
 
+function progressOf(book) {
+  if (book.type === 'physical' && book.totalPages) return book.currentPage / book.totalPages;
+  if (book.progress !== undefined) return book.progress;
+  return book.cfi ? 0.05 : 0;
+}
 
-    const [books, setBooks] = useState([]);
-    const [isUploading, setIsUploading] = useState(false);
-    const [showAddPhysical, setShowAddPhysical] = useState(false);
-    const [showSettings, setShowSettings] = useState(false);
-    const [showDiscover, setShowDiscover] = useState(false);
-    const [isEditMode, setIsEditMode] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [streakData, setStreakData] = useState({ currentStreak: 0, maxStreak: 0, readToday: false });
-    const [hasApiKey, setHasApiKey] = useState(() => !!localStorage.getItem('gemini_api_key'));
-    const [dismissedBanner, setDismissedBanner] = useState(() => !!localStorage.getItem('api_banner_dismissed'));
-    const [showTour, setShowTour] = useState(false); // Disabled: onboarding tours removed for focus
+function metaLine(book) {
+  const pct = Math.round(progressOf(book) * 100);
+  const type = book.type === 'physical' ? 'Physical' : book.format === 'pdf' ? 'PDF' : 'E-book';
+  if (pct > 0 && pct < 100) return `${type}  ·  ${pct}%`;
+  if (pct >= 100) return `${type}  ·  Finished`;
+  return type;
+}
 
-    // Track which card has delete revealed (touch-friendly long-press or tap-icon)
-    const [revealedDeleteId, setRevealedDeleteId] = useState(null);
-    const longPressTimer = useRef(null);
+function statusOf(book) {
+  const p = progressOf(book);
+  if (p >= 1) return 'finished';
+  if (p > 0 || book.cfi) return 'reading';
+  return 'unread';
+}
 
-    const filteredBooks = books.filter(book => 
-        book.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        book.author.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+function GridCard({ book, index, onOpen, onDelete, isEditMode, revealedDeleteId, setRevealedDeleteId, longPressStart, longPressEnd }) {
+  const status = statusOf(book);
+  const pct = Math.round(progressOf(book) * 100);
+  const isRevealed = revealedDeleteId === book.id;
 
-    useEffect(() => {
-        loadBooks();
-        setStreakData(getStreakData());
-    }, []);
+  const handleClick = () => {
+    if (isEditMode) return;
+    if (isRevealed) { setRevealedDeleteId(null); return; }
+    onOpen(book);
+  };
 
-    const loadBooks = async () => {
-        const storedBooks = await getBooks();
-        setBooks(storedBooks.sort((a, b) => b.lastRead - a.lastRead));
-    };
+  return (
+    <button
+      className={'ath-gridcard anim-fade-up' + (isEditMode ? ' animate-wiggle' : '')}
+      style={{ animationDelay: Math.min(index * 35, 320) + 'ms' }}
+      onClick={handleClick}
+      onPointerDown={() => !isEditMode && longPressStart(book.id)}
+      onPointerUp={longPressEnd}
+      onPointerLeave={longPressEnd}
+      onPointerCancel={longPressEnd}
+    >
+      <div className="ath-gridcard-cover">
+        <BookCover book={book} />
+        {!isEditMode && !isRevealed && (
+          <div className="ath-gridcard-hover">
+            <span className="ath-gridcard-cta">
+              <BookOpen size={13} strokeWidth={2} />
+              {status === 'reading' ? 'Resume' : status === 'finished' ? 'Reread' : 'Read'}
+            </span>
+          </div>
+        )}
+        {(isEditMode || isRevealed) && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4, borderRadius: '3px 5px 5px 3px' }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(e, book.id); }}
+              style={{ padding: 12, background: '#dc2626', borderRadius: '50%', color: '#fff', border: 0, cursor: 'pointer' }}
+            >
+              <Trash2 size={20} />
+            </button>
+          </div>
+        )}
+        {book.type === 'physical' && (
+          <span className="ath-gridcard-badge"><BookMarked size={12} strokeWidth={2} /></span>
+        )}
+      </div>
+      <div className="ath-gridcard-body">
+        <div className="ath-gridcard-title serif">{book.title}</div>
+        <div className="ath-gridcard-author">{book.author}</div>
+        <div className="label-cat ath-gridcard-meta">{metaLine(book)}</div>
+        {status === 'reading' && pct > 0 && (
+          <div className="ath-progress-wrap" style={{ marginTop: 8 }}>
+            <div className="ath-progress" style={{ height: 3 }}>
+              <div className="ath-progress-fill" style={{ width: pct + '%' }} />
+            </div>
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+function ContinueHero({ book, onOpen }) {
+  const pct = Math.round(progressOf(book) * 100);
+  const lastReadStr = book.lastRead
+    ? new Date(book.lastRead).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    : '';
+  return (
+    <div className="ath-hero anim-fade-up">
+      <div className="ath-hero-cover" onClick={() => onOpen(book)}>
+        <BookCover book={book} />
+      </div>
+      <div className="ath-hero-body">
+        <div className="label-cat" style={{ color: 'var(--accent-ink)' }}>
+          Continue reading{lastReadStr ? ` · ${lastReadStr}` : ''}
+        </div>
+        <h2 className="ath-hero-title serif">{book.title}</h2>
+        <div className="ath-hero-author">{book.author}</div>
+        <div className="ath-hero-progress">
+          <div className="ath-progress-wrap">
+            <div className="ath-progress" style={{ height: 5 }}>
+              <div className="ath-progress-fill" style={{ width: pct + '%' }} />
+            </div>
+          </div>
+          <div className="ath-hero-progress-meta">
+            <span className="mono">{pct}% complete</span>
+          </div>
+        </div>
+        <div className="ath-hero-actions">
+          <button className="ath-btn ath-btn--primary ath-btn--md" onClick={() => onOpen(book)}>
+            <BookOpen size={16} strokeWidth={2} /><span>Resume reading</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        setIsUploading(true);
+const Library = ({ onOpenBook, showDiscoverOnMount, onDiscoverClose }) => {
+  const [books, setBooks]                     = useState([]);
+  const [isUploading, setIsUploading]         = useState(false);
+  const [showAddPhysical, setShowAddPhysical] = useState(false);
+  const [showSettings, setShowSettings]       = useState(false);
+  const [showDiscover, setShowDiscover]       = useState(false);
+  const [isEditMode, setIsEditMode]           = useState(false);
+  const [searchQuery, setSearchQuery]         = useState('');
+  const [filter, setFilter]                   = useState('all');
+  const [hasApiKey, setHasApiKey]             = useState(() => !!localStorage.getItem('gemini_api_key'));
+  const [dismissedBanner, setDismissedBanner] = useState(() => !!localStorage.getItem('api_banner_dismissed'));
+  const [showAddMenu, setShowAddMenu]           = useState(false);
+  const [revealedDeleteId, setRevealedDeleteId] = useState(null);
+  const longPressTimer = useRef(null);
+  const addMenuRef = useRef(null);
+
+  useEffect(() => { loadBooks(); }, []);
+
+  useEffect(() => {
+    if (showDiscoverOnMount) setShowDiscover(true);
+  }, [showDiscoverOnMount]);
+
+  useEffect(() => {
+    const close = (e) => { if (addMenuRef.current && !addMenuRef.current.contains(e.target)) setShowAddMenu(false); };
+    if (showAddMenu) document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showAddMenu]);
+
+  const loadBooks = async () => {
+    const stored = await getBooks();
+    setBooks(stored.sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0)));
+  };
+
+  const heroBook = books.find(b => { const p = progressOf(b); return p > 0 && p < 1; }) || null;
+
+  const filteredBooks = books.filter(b => {
+    if (searchQuery && !(b.title + b.author).toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (filter === 'all') return true;
+    if (filter === 'reading') return statusOf(b) === 'reading';
+    if (filter === 'finished') return statusOf(b) === 'finished';
+    if (filter === 'ebook') return b.type !== 'physical';
+    if (filter === 'physical') return b.type === 'physical';
+    return true;
+  });
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      let title = file.name.replace(/\.(epub|pdf)$/i, '');
+      let author = 'Unknown Author';
+      let coverBlob = null;
+      const type = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'epub';
+      if (type === 'epub') {
         try {
-            let title = file.name.replace(/\.(epub|pdf)$/i, '');
-            let author = 'Unknown Author';
-            let coverBlob = null;
-            let type = file.name.endsWith('.pdf') ? 'pdf' : 'epub';
-
-            if (type === 'epub') {
-                try {
-                    const book = ePub(file);
-                    await book.ready;
-                    const metadata = await book.loaded.metadata;
-
-                    if (metadata.title) title = metadata.title;
-                    if (metadata.creator) author = metadata.creator;
-
-                    try {
-                        const coverUrl = await book.coverUrl();
-                        if (coverUrl) {
-                            const response = await fetch(coverUrl);
-                            const blob = await response.blob();
-                            // Convert cover Blob to ArrayBuffer for iOS stability
-                            coverBlob = {
-                                buffer: await blob.arrayBuffer(),
-                                type: blob.type
-                            };
-                        }
-                    } catch (err) {
-                        console.warn('Could not extract cover', err);
-                    }
-                } catch (err) {
-                    console.warn('Failed to parse EPUB metadata:', err);
-                }
+          const book = ePub(file);
+          await book.ready;
+          const metadata = await book.loaded.metadata;
+          if (metadata.title) title = metadata.title;
+          if (metadata.creator) author = metadata.creator;
+          try {
+            const coverUrl = await book.coverUrl();
+            if (coverUrl) {
+              const res = await fetch(coverUrl);
+              const blob = await res.blob();
+              coverBlob = { buffer: await blob.arrayBuffer(), type: blob.type };
             }
+          } catch {}
+        } catch {}
+      }
+      const fileBuffer = await file.arrayBuffer();
+      await saveBook({
+        id: Date.now().toString(), title, author,
+        fileData: { buffer: fileBuffer, type: file.type || (type === 'pdf' ? 'application/pdf' : 'application/epub+zip'), name: file.name },
+        cover: coverBlob, cfi: null, lastRead: Date.now(), format: type,
+      });
+      await loadBooks();
+    } catch (err) {
+      console.error('Error adding book:', err);
+      alert('Failed to add book. Please try another file.');
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
+  };
 
-            // Convert main file to ArrayBuffer for iOS stability
-            const fileBuffer = await file.arrayBuffer();
+  const handleDelete = async (e, bookId) => {
+    e.stopPropagation();
+    if (!window.confirm('Remove this book from your library?')) return;
+    await deleteBook(bookId);
+    setRevealedDeleteId(null);
+    await loadBooks();
+  };
 
-            const newBook = {
-                id: Date.now().toString(),
-                title: title,
-                author: author,
-                fileData: {
-                    buffer: fileBuffer,
-                    type: file.type || (type === 'pdf' ? 'application/pdf' : 'application/epub+zip'),
-                    name: file.name
-                },
-                cover: coverBlob, // Now an object { buffer, type } or null
-                cfi: null,
-                lastRead: Date.now(),
-                format: type,
-            };
+  const longPressStart = (bookId) => {
+    longPressTimer.current = setTimeout(() => setRevealedDeleteId(prev => prev === bookId ? null : bookId), 400);
+  };
+  const longPressEnd = () => clearTimeout(longPressTimer.current);
 
-            await saveBook(newBook);
-            await loadBooks();
-        } catch (error) {
-            console.error('Error adding book:', error);
-            alert('Failed to add book. Please try another file.');
-        } finally {
-            setIsUploading(false);
-            e.target.value = '';
-        }
-    };
+  return (
+    <>
+      <div className="ath-screen scroll-area">
+        <div className="ath-screen-inner">
 
-    const handleDelete = async (e, bookId) => {
-        e.stopPropagation();
-        if (!window.confirm('Remove this book from your library?')) return;
-        await deleteBook(bookId);
-        setRevealedDeleteId(null);
-        await loadBooks();
-    };
+          {/* Page header */}
+          <header className="ath-pagehead">
+            <div>
+              <div className="label-cat">Your collection · {books.length} volume{books.length !== 1 ? 's' : ''}</div>
+              <h1 className="ath-pagetitle serif">The Library</h1>
+            </div>
+            <div className="ath-search ath-pagehead-search">
+              <Search size={16} style={{ color: 'var(--ink-faint)', flexShrink: 0 }} />
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search title or author…" />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="ath-iconbtn"
+                onClick={() => setShowSettings(true)}
+                title="Settings"
+                style={!hasApiKey ? { color: 'var(--accent-ink)', background: 'var(--accent-soft)' } : {}}
+              >
+                <Settings size={18} />
+              </button>
 
-    const handleLongPressStart = (bookId) => {
-        longPressTimer.current = setTimeout(() => {
-            setRevealedDeleteId(prev => prev === bookId ? null : bookId);
-        }, 400);
-    };
+              {/* Add Book — integrated dropdown, no floating overlay */}
+              <div style={{ position: 'relative' }} ref={addMenuRef}>
+                <button
+                  className="ath-btn ath-btn--primary ath-btn--sm"
+                  onClick={() => setShowAddMenu(v => !v)}
+                  aria-expanded={showAddMenu}
+                >
+                  <Plus size={14} strokeWidth={2.5} />
+                  <span>Add Book</span>
+                </button>
 
-    const handleLongPressEnd = () => {
-        clearTimeout(longPressTimer.current);
-    };
-
-    // Dismiss delete button when tapping elsewhere
-    const handleCardClick = (book) => {
-        if (isEditMode) return;
-        if (revealedDeleteId === book.id) {
-            setRevealedDeleteId(null);
-            return;
-        }
-        onOpenBook(book);
-    };
-
-    return (
-        <>
-            {/* Header */}
-            <header className="flex-shrink-0 flex flex-col sm:flex-row sm:justify-between sm:items-center px-4 md:px-10 pt-4 pb-4 gap-4 flex-wrap bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 z-20">
-                <div className="flex items-center gap-3 sm:gap-4">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">My Library</h1>
+                {showAddMenu && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 60,
+                    background: 'var(--surface)', border: '1px solid var(--line)',
+                    borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-lg)',
+                    padding: 6, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 216,
+                  }}>
                     <button
-                        id="streak-btn"
-                        onClick={onOpenDashboard}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/30 rounded-full border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors cursor-pointer group"
-                        title={`Max Streak: ${streakData.maxStreak} days. Click to view full Dashboard.`}
+                      onClick={() => { setShowAddMenu(false); setShowDiscover(true); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', border: 0, background: 'none', cursor: 'pointer', color: 'var(--ink)', fontSize: 14, fontWeight: 500, width: '100%', textAlign: 'left' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
                     >
-                        <Flame
-                            size={20}
-                            className={`${streakData.readToday ? 'text-orange-500 fill-orange-500' : 'text-gray-400'} group-hover:scale-110 transition-transform`}
-                        />
-                        <span className="font-bold text-sm text-gray-700 dark:text-gray-300">
-                            {streakData.currentStreak} Day Streak
-                        </span>
-                        <BarChart2 size={16} className="text-gray-400 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-soft)', color: 'var(--accent-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Compass size={16} />
+                      </div>
+                      Discover Classics
                     </button>
-                    {onOpenCommonplace && (
-                        <button
-                            onClick={onOpenCommonplace}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/30 rounded-full border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
-                            title="Open Commonplace Book"
-                        >
-                            <BookMarked size={18} className="text-amber-500" />
-                            <span className="font-semibold text-sm text-amber-700 dark:text-amber-300 hidden sm:inline">Commonplace</span>
-                        </button>
-                    )}
-                    {onOpenKnowledgeBase && (
-                        <button
-                            onClick={onOpenKnowledgeBase}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-violet-50 dark:bg-violet-950/30 rounded-full border border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors cursor-pointer"
-                            title="Open Knowledge Base"
-                        >
-                            <Brain size={18} className="text-violet-500" />
-                            <span className="font-semibold text-sm text-violet-700 dark:text-violet-300 hidden sm:inline">Ask</span>
-                        </button>
-                    )}
-                </div>
-
-
-                <div className="flex items-center gap-3 sm:ml-auto">
-                    <button
-                        onClick={() => setShowDiscover(true)}
-                        className="hidden sm:flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors shadow-sm text-sm font-medium border border-indigo-200 dark:border-indigo-800"
-                        title="Discover Free Books"
+                    <label
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', cursor: 'pointer', color: 'var(--ink)', fontSize: 14, fontWeight: 500 }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
                     >
-                        <Compass className="w-[18px] h-[18px]" />
-                        <span className="hidden sm:inline">Discover</span>
-                    </button>
-                    <button
-                        id="physical-btn"
-                        onClick={() => setShowAddPhysical(true)}
-                        className="hidden sm:flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-sm text-sm font-medium"
-                    >
-                        <BookPlus size={18} />
-                        <span>Physical</span>
-                    </button>
-                    <label id="upload-btn" className="hidden sm:flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors shadow-sm text-sm font-medium">
-                        <Plus size={18} />
-                        <span>Upload</span>
-                        <input
-                            type="file"
-                            accept=".epub,.pdf"
-                            onChange={handleFileUpload}
-                            className="hidden"
-                            disabled={isUploading}
-                        />
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'color-mix(in oklab, var(--accent) 10%, var(--surface-2))', color: 'var(--accent-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Upload size={16} />
+                      </div>
+                      Upload .epub / .pdf
+                      <input type="file" accept=".epub,.pdf" onChange={e => { setShowAddMenu(false); handleFileUpload(e); }} style={{ display: 'none' }} disabled={isUploading} />
                     </label>
                     <button
-                        id="settings-btn"
-                        onClick={() => setShowSettings(true)}
-                        className={`p-2 rounded-full transition-colors ${hasApiKey
-                            ? 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800'
-                            : 'text-orange-500 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100'
-                            }`}
-                        title="AI Settings"
+                      onClick={() => { setShowAddMenu(false); setShowAddPhysical(true); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-md)', border: 0, background: 'none', cursor: 'pointer', color: 'var(--ink)', fontSize: 14, fontWeight: 500, width: '100%', textAlign: 'left' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
                     >
-                        <Settings size={20} />
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'color-mix(in oklab, #2f9e44 10%, var(--surface-2))', color: '#2f9e44', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <BookPlus size={16} />
+                      </div>
+                      Add Physical Book
                     </button>
-                </div>
-            </header>
-
-            {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-
-                {/* Toolbar */}
-                <div className="flex items-center justify-between mb-6 gap-4">
-                    <div className="relative w-full max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                        <input 
-                            type="text" 
-                            placeholder="Search library..." 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm shadow-sm"
-                        />
-                    </div>
-                    <div className="flex-shrink-0">
-                         <button 
-                            onClick={() => setIsEditMode(!isEditMode)}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border shadow-sm ${
-                                isEditMode 
-                                ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300' 
-                                : 'bg-white border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                            }`}
-                         >
-                             {isEditMode ? <><Check size={16} /> <span className="hidden sm:inline">Done</span></> : <><Edit2 size={16} /> <span className="hidden sm:inline">Edit</span></>}
-                         </button>
-                    </div>
-                </div>
-
-                {/* First-launch API key banner */}
-                {!hasApiKey && !dismissedBanner && (
-                    <div className="mb-6 flex items-start gap-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-                        <Key size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Add your Gemini API key to unlock AI features</p>
-                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Summaries, Recall, and Explain won't work without it.</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                            <button
-                                onClick={() => setShowSettings(true)}
-                                className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 px-3 py-1.5 rounded-lg hover:bg-amber-200 transition-colors"
-                            >
-                                Add Key
-                            </button>
-                            <button
-                                onClick={() => { setDismissedBanner(true); localStorage.setItem('api_banner_dismissed', '1'); }}
-                                className="p-1 text-amber-400 hover:text-amber-600 transition-colors"
-                            >
-                                <X size={14} />
-                            </button>
-                        </div>
-
-                        <div className="p-4">
-                            <h3 className="font-semibold text-gray-900 dark:text-white truncate" title={book.title}>
-                                {book.title}
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                                {book.author}
-                            </p>
-                            {book.rating && (
-                                <div className="mt-2 text-xs">
-                                    <span className="inline-flex items-center gap-1 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-100 px-2 py-1 rounded">
-                                        ⭐ {book.rating.toFixed(1)} <span className="text-gray-500 dark:text-gray-400">({book.ratingCount})</span>
-                                    </span>
-                                </div>
-                            )}
-                            {book.cfi && (
-                                <div className="mt-2 text-xs text-blue-600 font-medium">
-                                    In Progress
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                  </div>
+>>>>>>> d7159da (feat: implement Atheneum design system — SVG logo, welcome screen, AI sheets, insights polish)
                 )}
-
-                {isUploading && (
-                    <div className="text-center py-4 flex items-center justify-center gap-3 text-sm text-gray-500 mb-4">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                        <span>Processing book, please wait...</span>
-                    </div>
-                )}
-
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {filteredBooks.map((book) => (
-                        <div
-                            key={book.id}
-                            className={`group relative bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer overflow-hidden border border-gray-100 dark:border-gray-700 ${isEditMode ? 'animate-wiggle' : ''}`}
-                            style={{ touchAction: 'pan-y' }}
-                            onClick={() => handleCardClick(book)}
-                            onPointerDown={() => !isEditMode && handleLongPressStart(book.id)}
-                            onPointerUp={handleLongPressEnd}
-                            onPointerLeave={handleLongPressEnd}
-                            onPointerCancel={handleLongPressEnd}
-                        >
-                            <div className="aspect-[2/3] bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
-                                {book.cover ? (
-                                    <img
-                                        src={URL.createObjectURL(
-                                            book.cover instanceof Blob
-                                                ? book.cover
-                                                : new Blob([book.cover.buffer || book.cover], { type: book.cover.type || 'image/jpeg' })
-                                        )}
-                                        alt={book.title}
-                                        className="w-full h-full object-cover"
-                                        onLoad={(e) => URL.revokeObjectURL(e.target.src)}
-                                    />
-                                ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 p-4 text-center">
-                                        <Book size={48} className="mb-2" />
-                                        <span className="text-xs">{book.title}</span>
-                                    </div>
-                                )}
-                                {/* Delete button */}
-                                {(isEditMode || revealedDeleteId === book.id) && (
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity z-10">
-                                        <button
-                                            onClick={(e) => handleDelete(e, book.id)}
-                                            className="p-3 bg-red-600 text-white rounded-full shadow-xl transition-transform hover:scale-110 active:scale-95"
-                                            title="Remove book"
-                                        >
-                                            <Trash2 size={24} />
-                                        </button>
-                                        {!isEditMode && (
-                                            <div className="absolute bottom-2 text-white text-xs font-medium bg-red-600/90 px-2 py-1 rounded">
-                                                Tap 🗑 to remove
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="p-4">
-                                <h3 className="font-semibold text-gray-900 dark:text-white truncate" title={book.title}>
-                                    {book.title}
-                                </h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                                    {book.author}
-                                </p>
-                                {book.type === 'physical' && book.totalPages ? (
-                                    <div className="mt-2 text-xs text-emerald-600 font-medium">
-                                        {Math.round((book.currentPage / book.totalPages) * 100) || 0}% Complete
-                                    </div>
-                                ) : book.progress !== undefined ? (
-                                    <div className="mt-2 text-xs text-blue-600 font-medium">
-                                        {Math.round(book.progress * 100)}% Complete
-                                    </div>
-                                ) : book.cfi ? (
-                                    <div className="mt-2 text-xs text-blue-600 font-medium">
-                                        In Progress
-                                    </div>
-                                ) : null}
-                            </div>
-                        </div>
-                    ))}
-
-                    {filteredBooks.length === 0 && !isUploading && (
-                        <div className="col-span-full pt-10 pb-20 max-w-2xl mx-auto w-full">
-                            <div className="text-center mb-8">
-                                <Book size={48} className="mx-auto text-blue-500 mb-4" />
-                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Your library is empty</h2>
-                                <p className="text-gray-500 dark:text-gray-400">Let's populate it. Choose an option to get started!</p>
-                            </div>
-                            
-                            <div className="grid gap-4 sm:grid-cols-3 sm:gap-6">
-                                <button
-                                    onClick={() => setShowDiscover(true)}
-                                    className="flex flex-col items-center p-6 bg-white dark:bg-gray-800 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900/50 hover:border-indigo-500 hover:shadow-lg transition-all text-center group"
-                                >
-                                    <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                        <Compass size={32} />
-                                    </div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Discover Classics</h3>
-                                    <p className="text-xs text-gray-500">Download free public domain books exactly like Pride and Prejudice.</p>
-                                </button>
-
-                                <label className="flex flex-col items-center p-6 bg-white dark:bg-gray-800 rounded-2xl border-2 border-blue-100 dark:border-blue-900/50 hover:border-blue-500 hover:shadow-lg transition-all text-center cursor-pointer group">
-                                    <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                        <Plus size={32} />
-                                    </div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Upload File</h3>
-                                    <p className="text-xs text-gray-500">Import your own .epub or .pdf files to establish your collection.</p>
-                                    <input
-                                        type="file"
-                                        accept=".epub,.pdf"
-                                        onChange={handleFileUpload}
-                                        className="hidden"
-                                        disabled={isUploading}
-                                    />
-                                </label>
-
-                                <button
-                                    onClick={() => setShowAddPhysical(true)}
-                                    className="flex flex-col items-center p-6 bg-white dark:bg-gray-800 rounded-2xl border-2 border-emerald-100 dark:border-emerald-900/50 hover:border-emerald-500 hover:shadow-lg transition-all text-center group"
-                                >
-                                    <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                        <BookPlus size={32} />
-                                    </div>
-                                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Add Physical</h3>
-                                    <p className="text-xs text-gray-500">Manually log progress for a paper-backed physical book.</p>
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {showAddPhysical && (
-                    <AddPhysicalBook
-                        onClose={() => setShowAddPhysical(false)}
-                        onBookAdded={() => {
-                            setShowAddPhysical(false);
-                            loadBooks();
-                        }}
-                    />
-                )}
+              </div>
             </div>
+          </header>
 
-            <SettingsModal
-                isOpen={showSettings}
-                onClose={() => {
-                    setShowSettings(false);
-                    const key = localStorage.getItem('gemini_api_key');
-                    setHasApiKey(!!key);
-                    if (key) setDismissedBanner(true);
-                }}
-            />
+          {/* API key banner */}
+          {!hasApiKey && !dismissedBanner && (
+            <div className="ath-banner">
+              <Key size={16} style={{ color: 'oklch(0.72 0.14 60)', flexShrink: 0, marginTop: 1 }} />
+              <div className="ath-banner-body">
+                <div className="ath-banner-title">Add your Gemini API key to unlock AI features</div>
+                <div className="ath-banner-sub">Summaries, Recall and Explain won't work without it.</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <button className="ath-btn ath-btn--sm ath-btn--accentsoft" onClick={() => setShowSettings(true)}>Add Key</button>
+                <button className="ath-iconbtn" style={{ width: 28, height: 28 }} onClick={() => { setDismissedBanner(true); localStorage.setItem('api_banner_dismissed', '1'); }}>
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+          )}
 
-            <ProductTour
-                run={showTour}
-                onComplete={() => {
-                    localStorage.setItem('has_seen_interactive_tour', 'true');
-                    setShowTour(false);
-                }}
-            />
+          {isUploading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--ink-soft)', fontSize: 14 }}>
+              <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid var(--line)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+              Processing book…
+            </div>
+          )}
 
-            <DiscoverModal 
-                isOpen={showDiscover} 
-                onClose={() => setShowDiscover(false)} 
-                onBookAdded={() => {
-                    loadBooks();
-                }} 
-            />
+          {/* Empty library onboarding */}
+          {books.length === 0 && !isUploading ? (
+            <div className="ath-empty">
+              <BookOpen size={36} style={{ color: 'var(--ink-faint)' }} />
+              <p className="serif">Your library is empty</p>
+              <span className="label-cat">Add a book to get started</span>
+              <div className="ath-onboard-grid" style={{ width: '100%' }}>
+                <button className="ath-onboard-card" onClick={() => setShowDiscover(true)}>
+                  <div className="ath-onboard-icon"><Compass size={24} /></div>
+                  <div className="ath-onboard-title">Discover Classics</div>
+                  <div className="ath-onboard-desc">Browse free public-domain books</div>
+                </button>
+                <label className="ath-onboard-card">
+                  <div className="ath-onboard-icon"><Plus size={24} /></div>
+                  <div className="ath-onboard-title">Upload File</div>
+                  <div className="ath-onboard-desc">Import your own .epub or .pdf</div>
+                  <input type="file" accept=".epub,.pdf" onChange={handleFileUpload} style={{ display: 'none' }} disabled={isUploading} />
+                </label>
+                <button className="ath-onboard-card" onClick={() => setShowAddPhysical(true)}>
+                  <div className="ath-onboard-icon"><BookPlus size={24} /></div>
+                  <div className="ath-onboard-title">Add Physical Book</div>
+                  <div className="ath-onboard-desc">Track progress for a paper book</div>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {heroBook && filter === 'all' && !searchQuery && (
+                <ContinueHero book={heroBook} onOpen={onOpenBook} />
+              )}
 
-            <AddOptionsFab 
-                onUpload={handleFileUpload}
-                onPhysical={() => setShowAddPhysical(true)}
-                onDiscover={() => setShowDiscover(true)}
-                disabled={isUploading}
-                isHidden={showDiscover || showAddPhysical || showSettings}
-            />
-        </>
-    );
+              <div className="ath-filterbar">
+                <div className="ath-chips">
+                  {FILTERS.map(f => (
+                    <button key={f.value} className={'ath-chip ' + (filter === f.value ? 'is-on' : '')} onClick={() => setFilter(f.value)}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="label-cat">{filteredBooks.length} shown</span>
+                  <button className={'ath-btn ath-btn--sm ' + (isEditMode ? 'ath-btn--accentsoft' : 'ath-btn--ghost')} onClick={() => setIsEditMode(!isEditMode)}>
+                    {isEditMode ? <><X size={13} /><span>Done</span></> : <><Trash2 size={13} /><span>Edit</span></>}
+                  </button>
+                </div>
+              </div>
+
+              {filteredBooks.length > 0 ? (
+                <div className="ath-grid">
+                  {filteredBooks.map((book, i) => (
+                    <GridCard
+                      key={book.id} book={book} index={i}
+                      onOpen={onOpenBook} onDelete={handleDelete}
+                      isEditMode={isEditMode} revealedDeleteId={revealedDeleteId}
+                      setRevealedDeleteId={setRevealedDeleteId}
+                      longPressStart={longPressStart} longPressEnd={longPressEnd}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="ath-empty">
+                  <BookOpen size={30} style={{ color: 'var(--ink-faint)' }} />
+                  <p className="serif">Nothing matches.</p>
+                  <span className="label-cat">Try another filter</span>
+                </div>
+              )}
+            </>
+          )}
+
+        </div>
+      </div>
+
+      {showAddPhysical && (
+        <AddPhysicalBook onClose={() => setShowAddPhysical(false)} onBookAdded={() => { setShowAddPhysical(false); loadBooks(); }} />
+      )}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => { setShowSettings(false); const k = localStorage.getItem('gemini_api_key'); setHasApiKey(!!k); if (k) setDismissedBanner(true); }}
+      />
+      <DiscoverModal
+        isOpen={showDiscover}
+        onClose={() => { setShowDiscover(false); onDiscoverClose?.(); }}
+        onBookAdded={() => loadBooks()}
+      />
+    </>
+  );
 };
 
 export default Library;

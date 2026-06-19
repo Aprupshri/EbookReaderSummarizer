@@ -2,18 +2,6 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, Lightbulb, ArrowLeft } from 'lucide-react';
 
-/**
- * ReflectionCard — intercepts the back-button exit when there's an open prediction.
- * Surfaces the earlier prediction and asks how it went.
- *
- * Props:
- *  isOpen          {bool}
- *  prediction      {{ text, genre, timestamp }}
- *  bookTitle       {string}   — shown for context
- *  onOutcome       {fn(outcome)}  — called with 'yes' | 'partly' | 'no' | 'noyet'
- *  onSkip          {fn}           — exits without recording outcome
- *  onKeepReading   {fn}           — cancels exit, returns to book
- */
 const ReflectionCard = ({ isOpen, prediction, bookTitle, onOutcome, onSkip, onKeepReading }) => {
     if (!prediction) return null;
 
@@ -21,14 +9,14 @@ const ReflectionCard = ({ isOpen, prediction, bookTitle, onOutcome, onSkip, onKe
 
     const outcomes = isFiction
         ? [
-            { key: 'yes', emoji: '✅', label: 'Yes!', sub: 'Nailed it' },
+            { key: 'yes',    emoji: '✅', label: 'Yes!',   sub: 'Nailed it' },
             { key: 'partly', emoji: '〰️', label: 'Partly', sub: 'Close enough' },
-            { key: 'no', emoji: '❌', label: 'Nope', sub: 'Surprised me' },
+            { key: 'no',     emoji: '❌', label: 'Nope',   sub: 'Surprised me' },
         ]
         : [
-            { key: 'yes', emoji: '✅', label: 'Yes!', sub: 'Learned it' },
+            { key: 'yes',    emoji: '✅', label: 'Yes!',    sub: 'Learned it' },
             { key: 'partly', emoji: '〰️', label: 'Partly', sub: 'Still processing' },
-            { key: 'noyet', emoji: '📖', label: 'Not yet', sub: 'Still reading' },
+            { key: 'noyet',  emoji: '📖', label: 'Not yet', sub: 'Still reading' },
         ];
 
     return (
@@ -41,7 +29,6 @@ const ReflectionCard = ({ isOpen, prediction, bookTitle, onOutcome, onSkip, onKe
                     exit={{ opacity: 0 }}
                     className="fixed inset-0 z-[95] flex items-center justify-center p-6"
                     style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
-                // Intentionally no onClick on backdrop — don't accidentally dismiss
                 >
                     <motion.div
                         key="reflection-card"
@@ -49,74 +36,94 @@ const ReflectionCard = ({ isOpen, prediction, bookTitle, onOutcome, onSkip, onKe
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.9, opacity: 0, y: 20 }}
                         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                        className="w-full max-w-sm rounded-3xl bg-gray-900 border border-gray-700 shadow-2xl p-6"
+                        style={{
+                            width: '100%', maxWidth: 360,
+                            borderRadius: 'var(--r-xl)',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--line)',
+                            boxShadow: 'var(--shadow-lg)',
+                            padding: 24,
+                        }}
                         onClick={e => e.stopPropagation()}
                     >
-                        {/* Context header — explains why this appeared */}
-                        <div className="flex items-center gap-2 mb-5">
+                        {/* Context header */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
                             <button
                                 onClick={onKeepReading}
-                                className="p-1.5 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white transition-colors"
+                                className="ath-iconbtn"
                                 title="Keep Reading"
                             >
                                 <ArrowLeft size={18} />
                             </button>
                             <div>
-                                <p className="text-xs text-gray-500 uppercase tracking-wide">Before you go…</p>
+                                <p className="label-cat" style={{ textTransform: 'uppercase', fontSize: 10 }}>Before you go…</p>
                                 {bookTitle && (
-                                    <p className="text-white text-sm font-semibold truncate max-w-[220px]">{bookTitle}</p>
+                                    <p style={{ color: 'var(--ink)', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{bookTitle}</p>
                                 )}
                             </div>
                         </div>
 
-                        {/* Header icon */}
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4 ${isFiction ? 'bg-indigo-900/50' : 'bg-emerald-900/50'}`}>
+                        {/* Icon */}
+                        <div style={{
+                            width: 52, height: 52, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+                            background: isFiction ? 'var(--accent-soft)' : 'color-mix(in oklab, #2f9e44 12%, var(--surface-2))',
+                        }}>
                             {isFiction
-                                ? <BookOpen size={22} className="text-indigo-400" />
-                                : <Lightbulb size={22} className="text-emerald-400" />
+                                ? <BookOpen size={22} style={{ color: 'var(--accent)' }} />
+                                : <Lightbulb size={22} style={{ color: '#2f9e44' }} />
                             }
                         </div>
 
-                        <p className="text-center text-white font-bold text-lg mb-1">
+                        <p style={{ textAlign: 'center', color: 'var(--ink)', fontWeight: 700, fontSize: 18, marginBottom: 4 }}>
                             {isFiction ? 'Were you right?' : 'Did you find it?'}
                         </p>
-                        <p className="text-center text-gray-500 text-xs mb-4">You made a prediction at the start of this session.</p>
+                        <p style={{ textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12, marginBottom: 16 }}>
+                            You made a prediction at the start of this session.
+                        </p>
 
                         {/* Earlier prediction */}
-                        <div className="my-4 px-4 py-3 rounded-xl bg-gray-800 border border-gray-700">
-                            <p className="text-xs text-gray-500 mb-1 uppercase tracking-wide">
+                        <div style={{ margin: '0 0 16px', padding: '12px 16px', borderRadius: 'var(--r-md)', background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                            <p className="label-cat" style={{ textTransform: 'uppercase', fontSize: 10, marginBottom: 4 }}>
                                 {isFiction ? 'Your prediction' : 'Your intention'}
                             </p>
-                            <p className="text-gray-200 text-sm leading-relaxed italic">"{prediction.text}"</p>
+                            <p className="serif" style={{ color: 'var(--ink-soft)', fontSize: 14, lineHeight: 1.5, fontStyle: 'italic' }}>"{prediction.text}"</p>
                         </div>
 
                         {/* Outcome buttons */}
-                        <div className="flex gap-2 mb-4">
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                             {outcomes.map(o => (
                                 <button
                                     key={o.key}
                                     onClick={() => onOutcome(o.key)}
-                                    className="flex-1 py-3 rounded-2xl bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-all flex flex-col items-center gap-1 active:scale-95"
+                                    style={{
+                                        flex: 1, padding: '12px 4px', borderRadius: 'var(--r-md)',
+                                        background: 'var(--surface-2)', border: '1px solid var(--line)',
+                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                                        cursor: 'pointer', transition: 'all .15s',
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-soft)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-2)'}
                                 >
-                                    <span className="text-xl">{o.emoji}</span>
-                                    <span className="text-white text-xs font-semibold">{o.label}</span>
-                                    <span className="text-gray-500 text-[10px]">{o.sub}</span>
+                                    <span style={{ fontSize: 20 }}>{o.emoji}</span>
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{o.label}</span>
+                                    <span style={{ fontSize: 10, color: 'var(--ink-faint)' }}>{o.sub}</span>
                                 </button>
                             ))}
                         </div>
 
-                        <div className="flex gap-2">
+                        <div style={{ display: 'flex', gap: 8 }}>
                             <button
                                 onClick={onKeepReading}
-                                className="flex-1 py-2.5 text-sm text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors font-medium"
+                                className="ath-btn ath-btn--secondary ath-btn--md"
+                                style={{ flex: 1 }}
                             >
                                 ← Keep Reading
                             </button>
                             <button
                                 onClick={onSkip}
-                                className="flex-1 py-2.5 text-sm text-gray-600 hover:text-gray-400 transition-colors"
+                                style={{ flex: 1, padding: '10px 14px', background: 'none', border: 0, fontSize: 14, color: 'var(--ink-faint)', cursor: 'pointer' }}
                             >
-                                Skip & exit
+                                Skip &amp; exit
                             </button>
                         </div>
                     </motion.div>

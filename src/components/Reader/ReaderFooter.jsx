@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Menu, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const ReaderFooter = ({
@@ -13,112 +13,115 @@ const ReaderFooter = ({
     const [isDragging, setIsDragging] = useState(false);
     const [dragPercent, setDragPercent] = useState(0);
     const lastHref = useRef(null);
+    const trackRef = useRef(null);
 
     const actualPercent = location ? Math.round((location.start.percentage || 0) * 100) : 0;
     const displayPercent = isDragging ? Math.round(dragPercent) : actualPercent;
 
-    // Sync slider with actual progress when not dragging
     useEffect(() => {
         if (!isDragging) setDragPercent(actualPercent);
     }, [actualPercent, isDragging]);
 
-    const navigateToPercent = (pct) => {
+    const navigateToPercent = useCallback((pct) => {
         if (!onNavigate) return;
         const fraction = Math.max(0, Math.min(1, pct / 100));
-
-        // Only navigate if the value is meaningfully different
         const rounded = Math.round(fraction * 1000) / 1000;
         if (lastHref.current !== rounded) {
             lastHref.current = rounded;
             onNavigate({ fraction: rounded });
         }
+    }, [onNavigate]);
+
+    const percentFromPointer = (e) => {
+        const track = trackRef.current;
+        if (!track) return dragPercent;
+        const rect = track.getBoundingClientRect();
+        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        return Math.max(0, Math.min(100, (x / rect.width) * 100));
     };
 
-    const handleRelease = () => {
-        if (isDragging) {
-            setIsDragging(false);
-            navigateToPercent(dragPercent);
-        }
+    const handlePointerDown = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+        setDragPercent(percentFromPointer(e));
     };
 
-    const trackBg = theme === 'dark' ? '#374151' : theme === 'sepia' ? '#e3dccb' : '#e5e7eb';
+    const handlePointerMove = (e) => {
+        if (!isDragging) return;
+        setDragPercent(percentFromPointer(e));
+    };
+
+    const handlePointerUp = (e) => {
+        if (!isDragging) return;
+        const pct = percentFromPointer(e);
+        setDragPercent(pct);
+        setIsDragging(false);
+        navigateToPercent(pct);
+    };
 
     return (
-        <div
-            className={`absolute left-0 right-0 bottom-0 px-4 py-3 z-50 flex flex-col gap-2 transition-transform duration-300 ${showControls && !isFocusMode ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
-                } ${theme === 'dark' ? 'bg-gray-900/95 text-gray-400' :
-                    theme === 'sepia' ? 'bg-[#f4ecd8]/95 text-[#5b4636]/70' :
-                        'bg-white/95 text-gray-500'
-                }`}
-        >
+        <div className={`ath-rfooter${showControls && !isFocusMode ? '' : ' is-hidden'}`}>
             {location ? (
                 <>
-                    {/* Chapter label */}
-                    <div className="text-xs text-center opacity-70 w-full truncate px-4">
+                    <div className="ath-rfooter-chap">
                         {location.start.tocItem?.label || ''}
                     </div>
 
-                    {/* Bottom row: Menu, Slider, % */}
-                    <div className="flex items-center gap-4 w-full">
+                    <div className="ath-rfooter-row">
                         <button
-                            id="tour-toc"
                             onClick={onMenuClick}
-                            className="p-2 -ml-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0"
+                            className="ath-iconbtn"
+                            style={{ flexShrink: 0 }}
                             aria-label="Table of Contents"
                         >
-                            <Menu size={24} />
+                            <Menu size={20} />
                         </button>
 
-                        <div className="flex-1 flex items-center gap-2">
-                            <button
-                                onClick={() => onNavigate?.('prev')}
-                                className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                                title="Previous Chapter"
-                            >
-                                <ChevronLeft size={20} />
-                            </button>
+                        <button
+                            onClick={() => onNavigate?.('prev')}
+                            className="ath-iconbtn"
+                            style={{ flexShrink: 0 }}
+                            title="Previous Chapter"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
 
-                            <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                step="1"
-                                value={displayPercent}
-                                onPointerDown={() => setIsDragging(true)}
-                                onChange={(e) => {
-                                    setIsDragging(true);
-                                    setDragPercent(parseFloat(e.target.value));
-                                }}
-                                onPointerUp={handleRelease}
-                                onBlur={handleRelease}
-                                className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer outline-none"
-                                style={{
-                                    background: `linear-gradient(to right, #ec4899 ${displayPercent}%, ${trackBg} ${displayPercent}%)`,
-                                    accentColor: '#ec4899',
-                                }}
+                        <div
+                            ref={trackRef}
+                            className="ath-rslider"
+                            onPointerDown={handlePointerDown}
+                            onPointerMove={isDragging ? handlePointerMove : undefined}
+                            onPointerUp={handlePointerUp}
+                            onPointerLeave={isDragging ? handlePointerUp : undefined}
+                            style={{ touchAction: 'none' }}
+                        >
+                            <div
+                                className="ath-rslider-fill"
+                                style={{ width: `${displayPercent}%` }}
                             />
-
-                            <button
-                                onClick={() => onNavigate?.('next')}
-                                className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                                title="Next Chapter"
-                            >
-                                <ChevronRight size={20} />
-                            </button>
+                            <div
+                                className="ath-rslider-knob"
+                                style={{ left: `${displayPercent}%` }}
+                            />
                         </div>
 
-                        <div className="text-sm font-medium w-10 text-right select-none flex-shrink-0">
-                            {displayPercent}%
-                        </div>
+                        <button
+                            onClick={() => onNavigate?.('next')}
+                            className="ath-iconbtn"
+                            style={{ flexShrink: 0 }}
+                            title="Next Chapter"
+                        >
+                            <ChevronRight size={20} />
+                        </button>
+
+                        <div className="ath-rfooter-pg mono">{displayPercent}%</div>
                     </div>
                 </>
             ) : (
-                <span className="w-full text-center py-2">Loading...</span>
+                <div className="ath-rfooter-chap">Loading…</div>
             )}
         </div>
     );
 };
 
 export default ReaderFooter;
-
-

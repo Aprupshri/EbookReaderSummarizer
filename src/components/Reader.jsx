@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import ePub from 'epubjs';
-import { updateProgress, saveEbookSession } from '../utils/storage';
-import { generateSummary, getAISettings, PROVIDERS } from '../utils/ai';
-import { useReaderSettings } from '../utils/useReaderSettings';
-import { ArrowLeft, Settings, Sparkles, ChevronLeft, ChevronRight, Type, AlignJustify, Scroll, X, List } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import 'foliate-js/view.js';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Sparkles, X, BookOpen } from 'lucide-react';
+import { useReader } from './Reader/useReader';
 import SummaryModal from './SummaryModal';
 import RecallModal from './RecallModal';
 import ExplainModal from './ExplainModal';
@@ -19,7 +18,7 @@ import ReaderFooter from './Reader/ReaderFooter';
 import SelectionMenu from './Reader/SelectionMenu';
 import { getHighlights, saveHighlight, deleteHighlight } from '../utils/storage';
 
-const Reader = ({ book, onBack }) => {
+const Reader = ({ book, onBack, appTheme, onThemeChange }) => {
     const readerState = useReader({ book, onBack });
 
     const {
@@ -73,7 +72,6 @@ const Reader = ({ book, onBack }) => {
 
     const handleToggleBookmark = async () => {
         if (!currentCfi) return;
-
         if (isBookmarked) {
             await deleteHighlight(book.id, currentCfi);
             setBookmarks(prev => prev.filter(b => b.cfiRange !== currentCfi));
@@ -84,8 +82,13 @@ const Reader = ({ book, onBack }) => {
         }
     };
 
+    const handleThemeUpdate = (t) => {
+        update('theme', t);
+        onThemeChange?.(t);
+    };
+
     return (
-        <div className={`flex-1 w-full flex flex-col relative overflow-hidden ${theme === 'dark' ? 'bg-gray-900 text-white' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-white text-gray-900'}`}>
+        <div className="ath-reader" data-theme={theme}>
             <ReaderHeader
                 theme={theme}
                 showControls={showControls}
@@ -105,13 +108,12 @@ const Reader = ({ book, onBack }) => {
                 onToggleBookmark={handleToggleBookmark}
             />
 
-            {/* ReaderTour removed — contextual hint below replaces it */}
-
             <AppearanceMenu
                 showAppearance={showAppearance}
                 setShowAppearance={setShowAppearance}
                 theme={theme}
                 update={update}
+                onThemeChange={handleThemeUpdate}
                 fontSize={fontSize}
                 fontFamily={fontFamily}
                 maxWidth={maxWidth}
@@ -119,44 +121,37 @@ const Reader = ({ book, onBack }) => {
                 flow={flow}
             />
 
-            <div className={`absolute bottom-0 left-0 right-0 ios-pwa-reader ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#f4ecd8]' : 'bg-gray-50'}`} style={{ top: 'var(--safe-pt)' }}>
+            <div className="absolute ios-pwa-reader" style={{ inset: 0, top: 'var(--safe-pt)', background: 'var(--paper)' }}>
                 {loadError && (
-                    <div className="absolute inset-x-4 top-20 z-[100] bg-red-100 dark:bg-red-900/50 rounded-xl p-4 text-red-900 dark:text-red-100 flex flex-col items-center justify-center text-center shadow-lg border border-red-200 dark:border-red-800">
-                        <span className="font-bold text-lg mb-2">⚠ Error Loading Book</span>
-                        <p className="text-sm font-mono break-all max-w-[90%]">{loadError}</p>
-                        <button onClick={onBack} className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg">
-                            Go Back
-                        </button>
+                    <div style={{ position: 'absolute', inset: '80px 16px auto', zIndex: 100, background: 'color-mix(in oklab, red 10%, var(--surface))', border: '1px solid color-mix(in oklab, red 25%, var(--line))', borderRadius: 'var(--r-lg)', padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: 'var(--shadow-lg)', gap: 8 }}>
+                        <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--ink)' }}>Error Loading Book</span>
+                        <p style={{ fontSize: 12, fontFamily: 'monospace', wordBreak: 'break-all', maxWidth: '90%', color: 'var(--ink-soft)' }}>{loadError}</p>
+                        <button onClick={onBack} className="ath-btn ath-btn--primary ath-btn--sm" style={{ marginTop: 4 }}>Go Back</button>
                     </div>
                 )}
 
                 <foliate-view
                     key={`viewer-${book.id}-${book.openedAt || ''}`}
                     ref={viewerRef}
-                    className={`absolute inset-0 ${theme === 'dark' ? 'bg-gray-900' : theme === 'sepia' ? 'bg-[#f4ecd8]' : 'bg-white'}`}
-                    style={{ outline: 'none' }}
+                    className="absolute inset-0"
+                    style={{ outline: 'none', background: 'var(--paper)' }}
                 />
 
                 {flow === 'paginated' && (
                     <div className="absolute inset-0 z-10 pointer-events-none">
                         <div
-                            className="absolute inset-y-0 left-0 w-20 pointer-events-auto cursor-pointer flex items-center justify-start pl-4 nav-overlay"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handlePrev();
-                            }}
+                            className="absolute inset-y-0 left-0 w-20 pointer-events-auto cursor-pointer nav-overlay"
+                            onClick={(e) => { e.stopPropagation(); handlePrev(); }}
                         />
                         <div
-                            className="absolute inset-y-0 right-0 w-20 pointer-events-auto cursor-pointer flex items-center justify-end pr-4 nav-overlay"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleNext();
-                            }}
+                            className="absolute inset-y-0 right-0 w-20 pointer-events-auto cursor-pointer nav-overlay"
+                            onClick={(e) => { e.stopPropagation(); handleNext(); }}
                         />
                     </div>
                 )}
             </div>
 
+<<<<<<< HEAD
     const handleSummarize = async () => {
         const aiSettings = getAISettings();
         const providerConfig = PROVIDERS.find((p) => p.id === aiSettings.provider);
@@ -212,6 +207,32 @@ const Reader = ({ book, onBack }) => {
             setSummaryLoading(false);
         }
     };
+=======
+            <TocSidebar
+                showToc={showToc}
+                setShowToc={setShowToc}
+                theme={theme}
+                toc={toc}
+                onNavigate={async (href) => {
+                    const v = viewerRef.current;
+                    if (!v) return;
+                    if (href === 'next') { v.next(); return; }
+                    if (href === 'prev') { v.prev(); return; }
+                    try {
+                        await new Promise(r => setTimeout(r, 100));
+                        await viewerRef.current.goTo(href);
+                    } catch (err) {
+                        if (typeof href === 'string' && href.includes('#')) {
+                            try { await viewerRef.current.goTo(href.split('#')[0]); } catch {}
+                        }
+                    }
+                }}
+                bookTitle={book.title}
+                bookId={book.id}
+                location={location}
+                viewerRef={viewerRef}
+            />
+>>>>>>> d7159da (feat: implement Atheneum design system — SVG logo, welcome screen, AI sheets, insights polish)
 
             <ReaderFooter
                 showControls={showControls}
@@ -228,8 +249,7 @@ const Reader = ({ book, onBack }) => {
                     try {
                         await new Promise(r => setTimeout(r, 60));
                         await v.goTo(href);
-                    } catch (e) {
-                    }
+                    } catch {}
                 }}
             />
 
@@ -239,9 +259,18 @@ const Reader = ({ book, onBack }) => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 20 }}
-                        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[200] bg-black/80 backdrop-blur-md text-white text-sm px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 pointer-events-none"
+                        style={{
+                            position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
+                            background: 'color-mix(in oklab, var(--ink) 85%, transparent)',
+                            backdropFilter: 'blur(8px)',
+                            color: 'var(--paper)',
+                            fontSize: 13, padding: '10px 18px', borderRadius: 'var(--r-lg)',
+                            boxShadow: 'var(--shadow-lg)',
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            pointerEvents: 'none', whiteSpace: 'nowrap',
+                        }}
                     >
-                        <span>👆</span>
+                        <span style={{ fontSize: 16 }}>☝</span>
                         <span>Tap the page to show or hide the toolbar</span>
                     </motion.div>
                 )}
@@ -266,14 +295,37 @@ const Reader = ({ book, onBack }) => {
 
             <AnimatePresence>
                 {isFocusMode && showFocusExit && (
-                    <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3">
+                    <motion.div
+                        initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
+                        style={{ position: 'fixed', bottom: 40, left: '50%', transform: 'translateX(-50%)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}
+                    >
                         {focusGoal > 0 && (
-                            <div className="bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-4 py-2 rounded-full shadow-xl tracking-wider">
+                            <div style={{
+                                background: 'color-mix(in oklab, var(--ink) 75%, transparent)',
+                                backdropFilter: 'blur(8px)',
+                                color: 'var(--paper)',
+                                fontSize: 11, fontWeight: 700, padding: '6px 14px',
+                                borderRadius: 99, boxShadow: 'var(--shadow-lg)', letterSpacing: '0.08em',
+                            }}>
                                 {Math.floor(focusTimeRemaining / 60)}:{String(focusTimeRemaining % 60).padStart(2, '0')} REMAINING
                             </div>
                         )}
-                        <button onClick={handleExitFocus} className="bg-red-500/90 hover:bg-red-600 backdrop-blur-md text-white px-6 py-3 rounded-full font-bold shadow-xl transition-all active:scale-95 flex items-center gap-2 border border-red-400/30">
-                            <X size={20} /> Exit Focus
+                        <button
+                            onClick={handleExitFocus}
+                            style={{
+                                background: '#e03131', color: '#fff',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                backdropFilter: 'blur(8px)',
+                                padding: '12px 24px', borderRadius: 99,
+                                fontWeight: 700, fontSize: 14,
+                                boxShadow: 'var(--shadow-lg)',
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                cursor: 'pointer', transition: 'opacity .15s',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+                            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                        >
+                            <X size={18} /> Exit Focus
                         </button>
                     </motion.div>
                 )}
@@ -281,11 +333,21 @@ const Reader = ({ book, onBack }) => {
 
             <AnimatePresence>
                 {showFocusCelebration && (
-                    <motion.div initial={{ opacity: 0, y: -50, scale: 0.9 }} animate={{ opacity: 1, y: 20, scale: 1 }} exit={{ opacity: 0, y: -50, scale: 0.9 }} className="fixed top-safe left-1/2 -translate-x-1/2 z-[100] mt-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 min-w-[300px]">
-                        <Sparkles size={28} className="text-emerald-100 flex-shrink-0" />
+                    <motion.div
+                        initial={{ opacity: 0, y: -50, scale: 0.9 }} animate={{ opacity: 1, y: 20, scale: 1 }} exit={{ opacity: 0, y: -50, scale: 0.9 }}
+                        style={{
+                            position: 'fixed', top: 'var(--safe-pt, 0px)', left: '50%', transform: 'translateX(-50%)',
+                            zIndex: 100, marginTop: 16,
+                            background: 'var(--accent)', color: 'var(--on-accent)',
+                            padding: '16px 24px', borderRadius: 'var(--r-xl)',
+                            boxShadow: 'var(--shadow-lg)',
+                            display: 'flex', alignItems: 'center', gap: 16, minWidth: 300,
+                        }}
+                    >
+                        <Sparkles size={26} style={{ opacity: 0.9, flexShrink: 0 }} />
                         <div>
-                            <p className="font-bold text-base leading-tight">Session Complete!</p>
-                            <p className="text-xs text-emerald-50 mt-0.5">You crushed your {focusGoal}-minute goal.</p>
+                            <p style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>Session Complete!</p>
+                            <p style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>You crushed your {focusGoal}-minute goal.</p>
                         </div>
                     </motion.div>
                 )}
@@ -306,32 +368,41 @@ const Reader = ({ book, onBack }) => {
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.92, opacity: 0, y: 16 }}
                             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                            className="w-full max-w-sm rounded-3xl bg-gray-900 border border-gray-700 shadow-2xl p-6"
                             onClick={e => e.stopPropagation()}
+                            style={{
+                                width: '100%', maxWidth: 360,
+                                background: 'var(--surface)', border: '1px solid var(--line)',
+                                borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)', padding: 24,
+                            }}
                         >
-                            <p className="text-center text-white font-bold text-lg mb-1">One quick thing ✨</p>
-                            <p className="text-center text-gray-400 text-sm mb-6">What kind of book is <span className="text-white font-medium">{book.title}</span>? This helps tailor your summaries.</p>
-                            <div className="flex gap-3 mb-4">
+                            <p className="serif" style={{ textAlign: 'center', fontWeight: 700, fontSize: 18, color: 'var(--ink)', marginBottom: 6 }}>One quick thing</p>
+                            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', marginBottom: 24 }}>
+                                What kind of book is <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{book.title}</span>? This helps tailor your summaries.
+                            </p>
+                            <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                                 <button
                                     onClick={() => handleGenreConfirmed('fiction')}
-                                    className="flex-1 py-4 rounded-2xl bg-indigo-900/40 border border-indigo-700/50 text-indigo-300 font-medium hover:bg-indigo-900/60 transition-colors flex flex-col items-center gap-2 active:scale-95"
+                                    className="ath-btn ath-btn--secondary"
+                                    style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, height: 'auto', padding: '14px 8px' }}
                                 >
-                                    <span className="text-2xl">📖</span>
-                                    <span>Fiction</span>
-                                    <span className="text-xs opacity-60">Story, characters, plot</span>
+                                    <BookOpen size={22} style={{ color: 'var(--accent)' }} />
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Fiction</span>
+                                    <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Story, characters, plot</span>
                                 </button>
                                 <button
                                     onClick={() => handleGenreConfirmed('nonfiction')}
-                                    className="flex-1 py-4 rounded-2xl bg-emerald-900/40 border border-emerald-700/50 text-emerald-300 font-medium hover:bg-emerald-900/60 transition-colors flex flex-col items-center gap-2 active:scale-95"
+                                    className="ath-btn ath-btn--secondary"
+                                    style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 4, height: 'auto', padding: '14px 8px' }}
                                 >
-                                    <span className="text-2xl">💡</span>
-                                    <span>Non-Fiction</span>
-                                    <span className="text-xs opacity-60">Ideas, facts, knowledge</span>
+                                    <Sparkles size={22} style={{ color: '#2f9e44' }} />
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Non-Fiction</span>
+                                    <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Ideas, facts, knowledge</span>
                                 </button>
                             </div>
                             <button
                                 onClick={() => setShowGenrePicker(false)}
-                                className="w-full py-2 text-sm text-gray-600 hover:text-gray-400 transition-colors"
+                                className="ath-btn ath-btn--ghost ath-btn--md"
+                                style={{ width: '100%' }}
                             >
                                 Cancel
                             </button>
@@ -350,14 +421,14 @@ const Reader = ({ book, onBack }) => {
                 bookTitle={book.title}
                 onDeleteHighlight={(cfiRange) => {
                     if (viewerRef.current) {
-                        try { viewerRef.current.deleteAnnotation({ value: cfiRange }); } catch (e) { }
+                        try { viewerRef.current.deleteAnnotation({ value: cfiRange }); } catch {}
                     }
                 }}
                 onClickHighlight={(cfiRange) => {
                     setShowNotes(false);
                     if (viewerRef.current) {
                         setTimeout(() => {
-                            try { viewerRef.current.goTo(cfiRange); } catch (e) { }
+                            try { viewerRef.current.goTo(cfiRange); } catch {}
                         }, 100);
                     }
                 }}

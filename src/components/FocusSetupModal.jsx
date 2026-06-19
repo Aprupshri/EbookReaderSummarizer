@@ -24,42 +24,48 @@ const FocusSetupModal = ({ isOpen, onClose, onStart }) => {
 
     return (
         <AnimatePresence>
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+            >
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95, y: 10 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden border border-gray-100 dark:border-gray-700 max-h-[90vh]"
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    style={{
+                        background: 'var(--surface)', border: '1px solid var(--line)',
+                        borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)',
+                        width: '100%', maxWidth: 360, maxHeight: '90vh',
+                        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                    }}
                 >
                     {/* Header */}
-                    <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-                        <div className="flex items-center gap-2 text-gray-900 dark:text-white font-semibold">
-                            <Clock size={20} className="text-blue-500" />
-                            <span>Focus Session</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--line)', background: 'var(--surface-2)', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 15, color: 'var(--ink)' }}>
+                            <Clock size={18} style={{ color: 'var(--accent)' }} />
+                            Focus Session
                         </div>
-                        <button
-                            onClick={onClose}
-                            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                        >
-                            <X size={20} />
-                        </button>
+                        <button className="ath-iconbtn" onClick={onClose}><X size={18} /></button>
                     </div>
 
-                    <div className="overflow-y-auto min-h-0">
-                        <div className="p-5 space-y-6">
-                            {/* Read Goal */}
-                            <div className="space-y-3">
-                                <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Set a Goal</label>
-                                <div className="grid grid-cols-2 gap-2">
+                    <div style={{ overflowY: 'auto', flex: 1 }}>
+                        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+                            {/* Timer goal */}
+                            <div>
+                                <div className="label-cat" style={{ marginBottom: 10 }}>Set a Goal</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                                     {TIMER_OPTIONS.map(opt => (
                                         <button
                                             key={opt.value}
                                             onClick={() => setTimerGoal(opt.value)}
-                                            className={`p-3 rounded-xl border text-sm font-medium transition-all ${timerGoal === opt.value
-                                                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/50'
-                                                : 'border-gray-200 dark:border-gray-700 hover:border-blue-200 dark:hover:border-gray-600 text-gray-600 dark:text-gray-300'
-                                                }`}
+                                            style={{
+                                                padding: '12px', borderRadius: 'var(--r-md)',
+                                                border: timerGoal === opt.value ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                                                background: timerGoal === opt.value ? 'var(--accent-soft)' : 'var(--surface-2)',
+                                                color: timerGoal === opt.value ? 'var(--accent-ink)' : 'var(--ink-soft)',
+                                                fontSize: 14, fontWeight: 500, cursor: 'pointer', transition: 'all .15s',
+                                            }}
                                         >
                                             {opt.label}
                                         </button>
@@ -68,22 +74,26 @@ const FocusSetupModal = ({ isOpen, onClose, onStart }) => {
                             </div>
 
                             {/* Ambience */}
-                            <div className="space-y-3">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
-                                    <Headphones size={16} /> Background Ambience
-                                </label>
-                                <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <div className="label-cat" style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Headphones size={12} /> Background Ambience
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                                     {AMBIENCE_OPTIONS.map(opt => (
                                         <button
                                             key={opt.value}
                                             onClick={() => setAmbience(opt.value)}
-                                            className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${ambience === opt.value
-                                                ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/50'
-                                                : 'border-gray-200 dark:border-gray-700 hover:border-purple-200 dark:hover:border-gray-600 text-gray-600 dark:text-gray-300'
-                                                }`}
+                                            style={{
+                                                padding: '12px', borderRadius: 'var(--r-md)',
+                                                border: ambience === opt.value ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                                                background: ambience === opt.value ? 'var(--accent-soft)' : 'var(--surface-2)',
+                                                color: ambience === opt.value ? 'var(--accent-ink)' : 'var(--ink-soft)',
+                                                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                                                cursor: 'pointer', transition: 'all .15s',
+                                            }}
                                         >
-                                            <span className="text-xl">{opt.emoji}</span>
-                                            <span className="text-xs font-medium">{opt.label}</span>
+                                            <span style={{ fontSize: 22 }}>{opt.emoji}</span>
+                                            <span style={{ fontSize: 12, fontWeight: 500 }}>{opt.label}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -91,17 +101,18 @@ const FocusSetupModal = ({ isOpen, onClose, onStart }) => {
                         </div>
                     </div>
 
-                    {/* Footer / CTA */}
-                    <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                    {/* Footer */}
+                    <div style={{ padding: '16px 20px', borderTop: '1px solid var(--line)', background: 'var(--surface-2)', flexShrink: 0 }}>
                         <button
                             onClick={() => onStart({ timerGoal, ambience })}
-                            className="w-full py-3.5 px-4 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:hover:bg-white text-white dark:text-gray-900 rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                            className="ath-btn ath-btn--primary ath-btn--md"
+                            style={{ width: '100%' }}
                         >
-                            <Play size={18} fill="currentColor" />
+                            <Play size={17} fill="currentColor" />
                             Start Deep Reading
                         </button>
-                        <p className="text-center text-[11px] text-gray-500 mt-3 px-2">
-                            Distractions hidden. System status bar suppressed. Notifications masked.
+                        <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--ink-faint)', marginTop: 10 }}>
+                            Distractions hidden. Status bar suppressed.
                         </p>
                     </div>
                 </motion.div>

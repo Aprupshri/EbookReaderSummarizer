@@ -1,6 +1,10 @@
 import React from 'react';
 import { Highlighter, Sparkles, BookOpen, X, BookMarked } from 'lucide-react';
 
+const SEP = () => (
+    <div style={{ width: 1, height: 20, background: 'var(--line)', flexShrink: 0 }} />
+);
+
 const SelectionMenu = ({
     selection,
     showDictionary,
@@ -13,28 +17,55 @@ const SelectionMenu = ({
     if (!selection || showDictionary) return null;
 
     return (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-gray-800 rounded-full shadow-2xl border border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center gap-3 animate-in slide-in-from-bottom-5 max-w-[95vw] overflow-x-auto hide-scrollbar">
-            <button onClick={handleHighlight} className="flex items-center gap-1.5 text-sm font-medium text-yellow-600 dark:text-yellow-500 hover:opacity-80 transition-opacity flex-shrink-0">
+        <div
+            style={{
+                position: 'absolute', bottom: 64, left: '50%', transform: 'translateX(-50%)',
+                zIndex: 50,
+                background: 'var(--surface)',
+                borderRadius: 99,
+                boxShadow: '0 8px 32px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.1)',
+                border: '1px solid var(--line)',
+                padding: '8px 16px',
+                display: 'flex', alignItems: 'center', gap: 12,
+                maxWidth: '95vw', overflowX: 'auto',
+            }}
+        >
+            <button
+                onClick={handleHighlight}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 500, color: '#b7860d', flexShrink: 0, border: 0, background: 'none', cursor: 'pointer', padding: 0 }}
+            >
                 <Highlighter size={17} />
-                <span className="hidden xs:inline">Highlight</span>
+                <span>Highlight</span>
             </button>
-            <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 flex-shrink-0" />
-            <button onClick={handleSaveToCommonplace} className="flex items-center gap-1.5 text-sm font-medium text-amber-600 dark:text-amber-400 hover:opacity-80 transition-opacity flex-shrink-0">
+            <SEP />
+            <button
+                onClick={handleSaveToCommonplace}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 500, color: 'var(--accent-ink)', flexShrink: 0, border: 0, background: 'none', cursor: 'pointer', padding: 0 }}
+            >
                 <BookMarked size={17} />
-                <span className="hidden xs:inline">Save</span>
+                <span>Save</span>
             </button>
-            <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 flex-shrink-0" />
-            <button onClick={handleExplain} className="flex items-center gap-1.5 text-sm font-medium text-purple-600 dark:text-purple-400 hover:opacity-80 transition-opacity flex-shrink-0">
+            <SEP />
+            <button
+                onClick={handleExplain}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 500, color: 'var(--accent)', flexShrink: 0, border: 0, background: 'none', cursor: 'pointer', padding: 0 }}
+            >
                 <Sparkles size={17} />
-                <span className="hidden xs:inline">Explain</span>
+                <span>Explain</span>
             </button>
-            <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 flex-shrink-0" />
-            <button onClick={handleDictionary} className="flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:opacity-80 transition-opacity flex-shrink-0">
+            <SEP />
+            <button
+                onClick={handleDictionary}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 500, color: 'var(--ink-soft)', flexShrink: 0, border: 0, background: 'none', cursor: 'pointer', padding: 0 }}
+            >
                 <BookOpen size={17} />
-                <span className="hidden xs:inline">Define</span>
+                <span>Define</span>
             </button>
-            <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 flex-shrink-0" />
-            <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors flex-shrink-0">
+            <SEP />
+            <button
+                onClick={clearSelection}
+                style={{ padding: 4, color: 'var(--ink-faint)', display: 'flex', border: 0, background: 'none', cursor: 'pointer', flexShrink: 0 }}
+            >
                 <X size={17} />
             </button>
         </div>
@@ -42,4 +73,3 @@ const SelectionMenu = ({
 };
 
 export default SelectionMenu;
-

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Book, Search, X, Camera, ChevronRight } from 'lucide-react';
+import { Book, Search, X, Camera, ChevronRight, Loader } from 'lucide-react';
 import { saveBook } from '../utils/storage';
 
 const AddPhysicalBook = ({ onClose, onBookAdded }) => {
@@ -57,7 +57,6 @@ const AddPhysicalBook = ({ onClose, onBookAdded }) => {
     const searchBook = async (e) => {
         e.preventDefault();
         if (!searchQuery.trim()) return;
-
         setLoading(true);
         setError('');
         setSearchResults([]);
@@ -74,7 +73,6 @@ const AddPhysicalBook = ({ onClose, onBookAdded }) => {
                     const bookKey = Object.keys(data)[0];
                     const bookInfo = data[bookKey];
 
-                    // Fetch ratings from OpenLibrary ratings API
                     if (bookInfo.key) {
                         try {
                             const ratingRes = await fetch(`https://openlibrary.org${bookInfo.key}/ratings.json`);
@@ -91,14 +89,12 @@ const AddPhysicalBook = ({ onClose, onBookAdded }) => {
                     setError('Book not found. Try author search or manual entry.');
                 }
             } else {
-                // Author search
                 const response = await fetch(
                     `https://openlibrary.org/search.json?author=${encodeURIComponent(searchQuery)}&limit=100`
                 );
                 const data = await response.json();
 
                 if (data.docs && data.docs.length > 0) {
-                    // Filter: exclude summaries, guides, reviews, etc. and prioritize books with covers
                     const filterKeywords = [
                         'summary', 'summaries', 'guide', 'review', 'sparknotes', 'cliffsnotes',
                         'instaread', 'audiobook', 'audiobooks', 'analysis', 'study guide'
@@ -106,12 +102,10 @@ const AddPhysicalBook = ({ onClose, onBookAdded }) => {
                     let results = data.docs
                         .filter((doc) => {
                             const title = doc.title.toLowerCase();
-                            const isSummaryOrGuide = filterKeywords.some((keyword) => title.includes(keyword));
-                            const hasCover = doc.cover_i; // Only include books with covers
-                            return !isSummaryOrGuide && hasCover;
+                            return !filterKeywords.some((keyword) => title.includes(keyword)) && doc.cover_i;
                         })
-                        .sort((a, b) => (b.edition_count || 0) - (a.edition_count || 0)) // Sort by popularity
-                        .slice(0, 20) // Show top 20 books
+                        .sort((a, b) => (b.edition_count || 0) - (a.edition_count || 0))
+                        .slice(0, 20)
                         .map((doc) => ({
                             title: doc.title,
                             author: doc.author_name?.[0] || 'Unknown Author',
@@ -125,26 +119,19 @@ const AddPhysicalBook = ({ onClose, onBookAdded }) => {
                     if (results.length > 0) {
                         setSearchResults(results);
 
-                        // Fetch ratings for each book in background
                         results.forEach((book) => {
                             fetch(`https://openlibrary.org${book.key}/ratings.json`)
                                 .then((res) => res.json())
-                                .then((data) => {
+                                .then((rData) => {
                                     setSearchResults((prev) =>
                                         prev.map((b) =>
                                             b.key === book.key
-                                                ? {
-                                                    ...b,
-                                                    ratings_average: data.summary?.average || null,
-                                                    ratings_count: data.summary?.count || null,
-                                                  }
+                                                ? { ...b, ratings_average: rData.summary?.average || null, ratings_count: rData.summary?.count || null }
                                                 : b
                                         )
                                     );
                                 })
-                                .catch(() => {
-                                    // Silently fail - ratings are optional
-                                });
+                                .catch(() => {});
                         });
                     } else {
                         setError('No actual books found. Try ISBN search or manual entry.');
@@ -186,122 +173,95 @@ const AddPhysicalBook = ({ onClose, onBookAdded }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl flex flex-col m-2 sm:m-4 shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="p-4 sm:p-6 overflow-y-auto w-full">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <Book size={24} className="text-blue-500" />
-                            Add Physical Book
-                        </h2>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                            <X size={24} />
-                        </button>
+        <div className="ath-overlay" onClick={onClose}>
+            <div className="ath-modal ath-modal--center" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+                <div className="ath-modal-head">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Book size={16} style={{ color: 'var(--accent)' }} />
+                        <h2 className="serif">Add Physical Book</h2>
                     </div>
+                    <button className="ath-iconbtn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+                </div>
 
                     {!showManualEntry ? (
-                        <form onSubmit={searchBook} className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                                    Search Type
-                                </label>
-                                <div className="flex gap-3">
+                        <form onSubmit={searchBook} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                            {/* Search type toggle */}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                {['isbn', 'author'].map((type) => (
                                     <button
+                                        key={type}
                                         type="button"
-                                        onClick={() => {
-                                            setSearchType('isbn');
-                                            setSearchQuery('');
-                                            setSearchResults([]);
-                                            setError('');
-                                        }}
-                                        className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors ${
-                                            searchType === 'isbn'
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                        }`}
+                                        onClick={() => { setSearchType(type); setSearchQuery(''); setSearchResults([]); setSelectedBook(null); setError(''); }}
+                                        className={'ath-btn ath-btn--sm ' + (searchType === type ? 'ath-btn--primary' : 'ath-btn--ghost')}
+                                        style={{ flex: 1, justifyContent: 'center' }}
                                     >
-                                        ISBN
+                                        {type === 'isbn' ? 'ISBN' : 'Author'}
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setSearchType('author');
-                                            setSearchQuery('');
-                                            setSearchResults([]);
-                                            setError('');
-                                        }}
-                                        className={`flex-1 py-2 px-3 rounded-lg font-medium transition-colors ${
-                                            searchType === 'author'
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                        }`}
-                                    >
-                                        Author
-                                    </button>
-                                </div>
+                                ))}
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                <div className="label-cat" style={{ marginBottom: 8 }}>
                                     {searchType === 'isbn' ? 'Scan or Enter ISBN' : 'Enter Author Name'}
-                                </label>
-                                <div className="relative">
-                                    <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                </div>
+                                <div style={{ position: 'relative' }}>
+                                    <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-faint)', pointerEvents: 'none' }} />
                                     <input
                                         type="text"
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        placeholder={searchType === 'isbn' ? 'e.g. 9780544003415' : 'e.g. J.K. Rowling'}
-                                        className="w-full pl-10 pr-12 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white outline-none transition-all"
+                                        placeholder={searchType === 'isbn' ? 'e.g. 9780544003415' : 'e.g. Ursula K. Le Guin'}
+                                        className="ath-input"
+                                        style={{ paddingLeft: 38, paddingRight: searchType === 'isbn' ? 44 : 12 }}
                                     />
                                     {searchType === 'isbn' && (
-                                        <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-500 hover:text-blue-600 transition-colors" title="Scan Barcode (Coming Soon)">
-                                            <Camera size={20} />
+                                        <button type="button" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 0, color: 'var(--accent)', cursor: 'pointer', padding: 0 }} title="Scan Barcode (Coming Soon)">
+                                            <Camera size={18} />
                                         </button>
                                     )}
                                 </div>
-                                {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+                                {error && <p style={{ marginTop: 6, fontSize: 13, color: 'var(--error, #c92a2a)' }}>{error}</p>}
                             </div>
 
                             <button
                                 type="submit"
                                 disabled={loading || !searchQuery.trim()}
-                                className="w-full bg-blue-600 text-white rounded-xl py-3 font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30"
+                                className="ath-btn ath-btn--primary ath-btn--md"
+                                style={{ width: '100%', justifyContent: 'center' }}
                             >
-                                {loading ? (
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                ) : (
-                                    `Search ${searchType === 'isbn' ? 'ISBN' : 'Author'}`
-                                )}
+                                {loading
+                                    ? <><Loader size={15} style={{ animation: 'spin 0.8s linear infinite' }} /><span>Searching…</span></>
+                                    : `Search by ${searchType === 'isbn' ? 'ISBN' : 'Author'}`}
                             </button>
 
                             {!selectedBook && searchResults.length > 0 && (
-                                <div className="space-y-3">
-                                    <h3 className="font-semibold text-gray-800 dark:text-white">Found {searchResults.length} books:</h3>
-                                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                                <div>
+                                    <div className="label-cat" style={{ marginBottom: 8 }}>Found {searchResults.length} books</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 320, overflowY: 'auto' }}>
                                         {searchResults.map((book, idx) => (
                                             <button
                                                 key={idx}
                                                 type="button"
                                                 onClick={() => setSelectedBook(book)}
-                                                className="w-full flex gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
+                                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-2)', cursor: 'pointer', textAlign: 'left', width: '100%' }}
                                             >
                                                 {book.cover && (
-                                                    <img src={book.cover} alt={book.title} className="w-12 h-16 rounded object-cover" />
+                                                    <img src={book.cover} alt={book.title} style={{ width: 36, height: 52, borderRadius: 3, objectFit: 'cover', flexShrink: 0 }} />
                                                 )}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-medium text-gray-900 dark:text-white truncate">{book.title}</p>
-                                                    <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{book.author}</p>
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="text-xs text-gray-500 dark:text-gray-500">{book.pages} pages</p>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{book.title}</div>
+                                                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{book.author}</div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                                        <span className="label-cat">{book.pages} pages</span>
                                                         {book.ratings_average && (
-                                                            <span className="text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-900 dark:text-yellow-100 px-2 py-0.5 rounded">
-                                                                ⭐ {book.ratings_average.toFixed(1)} ({book.ratings_count})
+                                                            <span style={{ fontSize: 11, background: 'color-mix(in oklab, #f59e0b 15%, var(--surface-2))', color: '#b45309', padding: '1px 6px', borderRadius: 99 }}>
+                                                                ★ {book.ratings_average.toFixed(1)}
                                                             </span>
                                                         )}
                                                     </div>
                                                 </div>
-                                                <ChevronRight size={20} className="text-gray-400 flex-shrink-0 my-auto" />
+                                                <ChevronRight size={16} style={{ color: 'var(--ink-faint)', flexShrink: 0 }} />
                                             </button>
                                         ))}
                                     </div>
@@ -309,150 +269,70 @@ const AddPhysicalBook = ({ onClose, onBookAdded }) => {
                             )}
 
                             {selectedBook && (
-                                <div className="space-y-6">
-                                    <div className="flex flex-col items-center gap-6">
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                                         {selectedBook.cover && (
-                                            <img
-                                                src={selectedBook.cover}
-                                                alt={selectedBook.title}
-                                                className="w-32 h-48 rounded-lg object-cover shadow-lg"
-                                            />
+                                            <img src={selectedBook.cover} alt={selectedBook.title} style={{ width: 96, height: 140, borderRadius: 6, objectFit: 'cover', boxShadow: 'var(--shadow-md)' }} />
                                         )}
-                                        <div className="text-center w-full">
-                                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                                                {selectedBook.title}
-                                            </h3>
-                                            <p className="text-gray-600 dark:text-gray-400 mb-1">{selectedBook.author}</p>
-                                            <p className="text-sm text-gray-500 dark:text-gray-500 mb-2">{selectedBook.pages} pages</p>
+                                        <div style={{ textAlign: 'center' }}>
+                                            <div className="serif" style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>{selectedBook.title}</div>
+                                            <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{selectedBook.author}</div>
+                                            <div className="label-cat" style={{ marginTop: 4 }}>{selectedBook.pages} pages</div>
                                             {selectedBook.ratings_average && (
-                                                <div className="flex items-center justify-center gap-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg py-2 px-3">
-                                                    <span className="text-lg">⭐</span>
-                                                    <div className="text-left">
-                                                        <p className="font-semibold text-yellow-900 dark:text-yellow-100">
-                                                            {selectedBook.ratings_average.toFixed(1)}/5
-                                                        </p>
-                                                        <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                                                            {selectedBook.ratings_count} ratings
-                                                        </p>
-                                                    </div>
+                                                <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'color-mix(in oklab, #f59e0b 12%, var(--surface-2))', color: '#b45309', padding: '5px 12px', borderRadius: 99, fontSize: 13 }}>
+                                                    ★ {selectedBook.ratings_average.toFixed(1)}/5
+                                                    <span style={{ fontSize: 11, opacity: 0.7 }}>({selectedBook.ratings_count} ratings)</span>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
-
-                                    <div className="flex gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedBook(null)}
-                                            className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl py-3 font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                                        >
-                                            Back
-                                        </button>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button type="button" onClick={() => setSelectedBook(null)} className="ath-btn ath-btn--ghost ath-btn--md" style={{ flex: 1, justifyContent: 'center' }}>Back</button>
                                         <button
                                             type="button"
                                             disabled={loading}
                                             onClick={async () => {
                                                 setLoading(true);
-                                                try {
-                                                    await addBookToLibrary(selectedBook);
-                                                } catch (err) {
-                                                    console.error(err);
-                                                    setError('Failed to add book.');
-                                                    setLoading(false);
-                                                }
+                                                try { await addBookToLibrary(selectedBook); }
+                                                catch (err) { console.error(err); setError('Failed to add book.'); setLoading(false); }
                                             }}
-                                            className="flex-1 bg-blue-600 text-white rounded-xl py-3 font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30"
+                                            className="ath-btn ath-btn--primary ath-btn--md"
+                                            style={{ flex: 1, justifyContent: 'center' }}
                                         >
-                                            {loading ? (
-                                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                            ) : (
-                                                'Add Book'
-                                            )}
+                                            {loading ? <Loader size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> : 'Add Book'}
                                         </button>
                                     </div>
                                 </div>
                             )}
 
-                            <div className="relative">
-                                <div className="absolute inset-0 flex items-center">
-                                    <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
-                                </div>
-                                <div className="relative flex justify-center text-sm">
-                                    <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">or</span>
-                                </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+                                <span className="label-cat">or</span>
+                                <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
                             </div>
 
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setShowManualEntry(true);
-                                    setError('');
-                                }}
-                                className="w-full bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl py-3 font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                            >
+                            <button type="button" onClick={() => { setShowManualEntry(true); setError(''); }} className="ath-btn ath-btn--ghost ath-btn--md" style={{ width: '100%', justifyContent: 'center' }}>
                                 Enter Manually
                             </button>
                         </form>
                     ) : (
-                        <form onSubmit={handleManualAdd} className="space-y-4">
+                        <form onSubmit={handleManualAdd} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Book Title
-                                </label>
-                                <input
-                                    type="text"
-                                    value={manualForm.title}
-                                    onChange={(e) => setManualForm({ ...manualForm, title: e.target.value })}
-                                    placeholder="e.g. The Great Gatsby"
-                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white outline-none transition-all"
-                                />
+                                <div className="label-cat" style={{ marginBottom: 8 }}>Book Title</div>
+                                <input type="text" value={manualForm.title} onChange={(e) => setManualForm({ ...manualForm, title: e.target.value })} placeholder="e.g. The Great Gatsby" className="ath-input" />
                             </div>
-
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Author
-                                </label>
-                                <input
-                                    type="text"
-                                    value={manualForm.author}
-                                    onChange={(e) => setManualForm({ ...manualForm, author: e.target.value })}
-                                    placeholder="e.g. F. Scott Fitzgerald"
-                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white outline-none transition-all"
-                                />
+                                <div className="label-cat" style={{ marginBottom: 8 }}>Author</div>
+                                <input type="text" value={manualForm.author} onChange={(e) => setManualForm({ ...manualForm, author: e.target.value })} placeholder="e.g. F. Scott Fitzgerald" className="ath-input" />
                             </div>
-
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Total Pages
-                                </label>
-                                <input
-                                    type="number"
-                                    value={manualForm.totalPages}
-                                    onChange={(e) => setManualForm({ ...manualForm, totalPages: e.target.value })}
-                                    placeholder="300"
-                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 dark:text-white outline-none transition-all"
-                                />
+                                <div className="label-cat" style={{ marginBottom: 8 }}>Total Pages</div>
+                                <input type="number" value={manualForm.totalPages} onChange={(e) => setManualForm({ ...manualForm, totalPages: e.target.value })} placeholder="300" className="ath-input" />
                             </div>
-
-                            {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
-
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowManualEntry(false);
-                                        setError('');
-                                    }}
-                                    className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl py-3 font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                                >
-                                    Back
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="flex-1 bg-blue-600 text-white rounded-xl py-3 font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30"
-                                >
-                                    Add Book
-                                </button>
+                            {error && <p style={{ fontSize: 13, color: 'var(--error, #c92a2a)' }}>{error}</p>}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button type="button" onClick={() => { setShowManualEntry(false); setError(''); }} className="ath-btn ath-btn--ghost ath-btn--md" style={{ flex: 1, justifyContent: 'center' }}>Back</button>
+                                <button type="submit" className="ath-btn ath-btn--primary ath-btn--md" style={{ flex: 1, justifyContent: 'center' }}>Add Book</button>
                             </div>
                         </form>
                     )}

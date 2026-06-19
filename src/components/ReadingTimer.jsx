@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, ArrowLeft, Save, Clock, BookOpen, List, X, Sparkles, Settings, BookMarked } from 'lucide-react';
+import { Play, Square, ArrowLeft, Save, Clock, BookOpen, X, Sparkles, Settings, BookMarked, Quote } from 'lucide-react';
 import { updatePhysicalProgress, saveSummary } from '../utils/storage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateSummary, getAISettings } from '../utils/ai';
 import SummaryModal from './SummaryModal';
 import SettingsModal from './SettingsModal';
 import NotesModal from './NotesModal';
+import EntryDrawer from './EntryDrawer';
 
 const ReadingTimer = ({ book, onBack }) => {
     const [isRunning, setIsRunning] = useState(false);
@@ -15,10 +16,10 @@ const ReadingTimer = ({ book, onBack }) => {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
 
-    // Summarization States
     const [showSummary, setShowSummary] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showNotes, setShowNotes] = useState(false);
+    const [showQuote, setShowQuote] = useState(false);
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [summaryText, setSummaryText] = useState('');
     const [showChapterPrompt, setShowChapterPrompt] = useState(false);
@@ -26,32 +27,20 @@ const ReadingTimer = ({ book, onBack }) => {
 
     useEffect(() => {
         let interval;
-        if (isRunning) {
-            interval = setInterval(() => {
-                setTimeInSeconds((prev) => prev + 1);
-            }, 1000);
-        } else if (!isRunning && timeInSeconds !== 0) {
-            clearInterval(interval);
-        }
+        if (isRunning) interval = setInterval(() => setTimeInSeconds(s => s + 1), 1000);
         return () => clearInterval(interval);
-    }, [isRunning, timeInSeconds]);
+    }, [isRunning]);
 
-    const formatTime = (totalSeconds) => {
-        const h = Math.floor(totalSeconds / 3600);
-        const m = Math.floor((totalSeconds % 3600) / 60);
-        const s = totalSeconds % 60;
-
-        if (h > 0) {
-            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        }
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    const formatTime = (s) => {
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
     };
 
     const handleStop = () => {
-        if (timeInSeconds > 0) {
-            setIsRunning(false);
-            setShowSaveModal(true);
-        }
+        if (timeInSeconds > 0) { setIsRunning(false); setShowSaveModal(true); }
     };
 
     const handleSaveSession = async () => {
@@ -59,21 +48,15 @@ const ReadingTimer = ({ book, onBack }) => {
             setSaveError(`Please enter a page number greater than ${book.currentPage || 0}.`);
             return;
         }
-        setSaveError('');
-        setSaving(true);
+        setSaveError(''); setSaving(true);
         const pagesRead = parseInt(newPage) - (book.currentPage || 0);
-        const durationMs = timeInSeconds * 1000;
-
-        await updatePhysicalProgress(book.id, pagesRead, durationMs, parseInt(newPage));
-
+        await updatePhysicalProgress(book.id, pagesRead, timeInSeconds * 1000, parseInt(newPage));
         setSaving(false);
-        onBack(); // Return to library after saving
+        onBack();
     };
 
-    // Calculate progress percentage
     const progressPercent = book.totalPages > 0
-        ? Math.min(Math.round(((book.currentPage || 0) / book.totalPages) * 100), 100)
-        : 0;
+        ? Math.min(Math.round(((book.currentPage || 0) / book.totalPages) * 100), 100) : 0;
 
     const handleSummarizeClick = () => {
         const aiSettings = getAISettings();
@@ -86,12 +69,7 @@ const ReadingTimer = ({ book, onBack }) => {
 
     const handleGenerateSummary = async () => {
         if (!chapterInput.trim()) return;
-
-        setShowChapterPrompt(false);
-        setShowSummary(true);
-        setSummaryLoading(true);
-        setSummaryText('');
-
+        setShowChapterPrompt(false); setShowSummary(true); setSummaryLoading(true); setSummaryText('');
         try {
             const metadata = {
                 title: book.title,
@@ -118,62 +96,65 @@ const ReadingTimer = ({ book, onBack }) => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center pt-8 px-4">
+        <div className="ath-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 32 }}>
 
-            <header className="w-full max-w-2xl flex items-center justify-between mb-6 sm:mb-12">
-                <button
-                    onClick={onBack}
-                    className="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-full transition-colors"
-                >
-                    <ArrowLeft size={24} />
+            {/* Header */}
+            <header style={{ width: '100%', maxWidth: 640, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 40, padding: '0 16px' }}>
+                <button onClick={onBack} className="ath-iconbtn">
+                    <ArrowLeft size={22} />
                 </button>
-                <div className="text-center truncate px-2 sm:px-4">
-                    <h1 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white truncate">{book.title}</h1>
-                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{book.author}</p>
-                    <button
-                        onClick={handleSummarizeClick}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors mr-2"
-                    >
-                        <Sparkles size={16} />
+                <div style={{ textAlign: 'center', flex: 1, padding: '0 12px', overflow: 'hidden' }}>
+                    <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{book.title}</h1>
+                    <p style={{ fontSize: 13, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{book.author}</p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button onClick={handleSummarizeClick} className="ath-btn ath-btn--accentsoft ath-btn--sm">
+                        <Sparkles size={14} />
                         <span className="hidden sm:inline">Summarize</span>
                     </button>
-
-                    <button
-                        onClick={() => setShowNotes(true)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors mr-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50`}
-                    >
-                        <BookMarked size={16} />
+                    <button onClick={() => setShowQuote(true)} className="ath-btn ath-btn--secondary ath-btn--sm">
+                        <Quote size={14} />
+                        <span className="hidden sm:inline">Quote</span>
+                    </button>
+                    <button onClick={() => setShowNotes(true)} className="ath-btn ath-btn--secondary ath-btn--sm">
+                        <BookMarked size={14} />
                         <span className="hidden sm:inline">Notes</span>
                     </button>
-
-                    <button onClick={() => setShowSettings(true)} className="p-2 hover:opacity-70 rounded-full transition-colors text-gray-600 dark:text-gray-300">
-                        <Settings size={20} />
+                    <button onClick={() => setShowSettings(true)} className="ath-iconbtn">
+                        <Settings size={18} />
                     </button>
-                    <div className="w-2 md:w-6"></div> {/* Spacer for centering */}
                 </div>
             </header>
 
+            {/* Timer card */}
             <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="bg-white dark:bg-gray-800 rounded-3xl p-6 sm:p-12 shadow-xl shadow-blue-900/5 w-full max-w-md text-center border border-gray-100 dark:border-gray-700 mx-4"
+                style={{
+                    background: 'var(--surface)', border: '1px solid var(--line)',
+                    borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-md)',
+                    padding: '48px 32px', width: '100%', maxWidth: 420,
+                    textAlign: 'center', margin: '0 16px',
+                }}
             >
-                <div className="text-5xl sm:text-7xl font-mono text-gray-800 dark:text-white mb-8 sm:mb-10 tabular-nums">
+                <div className="mono" style={{ fontSize: 'clamp(3rem, 12vw, 5rem)', color: 'var(--ink)', marginBottom: 40, fontVariantNumeric: 'tabular-nums', letterSpacing: '0.04em' }}>
                     {formatTime(timeInSeconds)}
                 </div>
 
-                <div className="flex justify-center gap-6">
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 24 }}>
                     {!isRunning ? (
                         <button
                             onClick={() => setIsRunning(true)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-20 h-20 flex items-center justify-center shadow-lg shadow-blue-500/40 transition-transform active:scale-95"
+                            style={{ width: 80, height: 80, borderRadius: '50%', background: 'var(--accent)', color: 'var(--on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 24px color-mix(in oklab, var(--accent) 40%, transparent)', border: 0, cursor: 'pointer', transition: 'transform .15s', fontSize: 0 }}
+                            onMouseDown={e => e.currentTarget.style.transform = 'scale(.94)'}
+                            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
                         >
-                            <Play size={32} className="ml-2" />
+                            <Play size={32} style={{ marginLeft: 4 }} />
                         </button>
                     ) : (
                         <button
                             onClick={handleStop}
-                            className="bg-red-500 hover:bg-red-600 text-white rounded-full w-20 h-20 flex items-center justify-center shadow-lg shadow-red-500/40 transition-transform active:scale-95 animate-pulse"
+                            style={{ width: 80, height: 80, borderRadius: '50%', background: '#e03131', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 24px rgba(224,49,49,.38)', border: 0, cursor: 'pointer', animation: 'pulse 2s infinite', fontSize: 0 }}
                         >
                             <Square size={28} />
                         </button>
@@ -181,34 +162,33 @@ const ReadingTimer = ({ book, onBack }) => {
                 </div>
             </motion.div>
 
-            <div className="w-full max-w-md mt-10">
-                <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400 mb-2">
-                    <span className="flex items-center gap-1"><BookOpen size={16} /> Page {book.currentPage || 0}</span>
+            {/* Progress bar */}
+            <div style={{ width: '100%', maxWidth: 420, marginTop: 40, padding: '0 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <BookOpen size={14} /> Page {book.currentPage || 0}
+                    </span>
                     <span>{progressPercent}% Complete</span>
                 </div>
-                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                        style={{ width: `${progressPercent}%` }}
-                    ></div>
+                <div style={{ height: 6, background: 'var(--line)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: 'var(--accent)', width: `${progressPercent}%`, transition: 'width .5s', borderRadius: 99 }} />
                 </div>
             </div>
 
+            {/* Save session modal */}
             <AnimatePresence>
                 {showSaveModal && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="ath-overlay" style={{ zIndex: 60 }} onClick={() => setShowSaveModal(false)}>
                         <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+                            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                            style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-xl)', padding: 24, width: '100%', maxWidth: 360, boxShadow: 'var(--shadow-lg)' }}
+                            onClick={e => e.stopPropagation()}
                         >
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Session Complete!</h3>
-                            <p className="text-gray-500 dark:text-gray-400 mb-6 flex items-center gap-2">
-                                <Clock size={16} /> You read for {formatTime(timeInSeconds)}.
+                            <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>Session Complete!</h3>
+                            <p style={{ color: 'var(--ink-soft)', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+                                <Clock size={15} /> You read for {formatTime(timeInSeconds)}.
                             </p>
-
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-soft)', marginBottom: 8 }}>
                                 What page did you stop on?
                             </label>
                             <input
@@ -216,32 +196,25 @@ const ReadingTimer = ({ book, onBack }) => {
                                 min={(book.currentPage || 0) + 1}
                                 max={book.totalPages || 9999}
                                 value={newPage}
-                                onChange={(e) => {
-                                    setNewPage(e.target.value);
-                                    setSaveError('');
-                                }}
-                                className="w-full px-4 py-3 text-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none dark:text-white mb-2"
+                                onChange={e => { setNewPage(e.target.value); setSaveError(''); }}
+                                className="ath-input"
+                                style={{ fontSize: 18, marginBottom: 6 }}
                             />
                             {saveError && (
-                                <p className="text-sm text-red-500 dark:text-red-400 mb-4 flex items-center gap-1">
-                                    <span>⚠</span> {saveError}
-                                </p>
+                                <p style={{ fontSize: 13, color: '#e03131', marginBottom: 12 }}>⚠ {saveError}</p>
                             )}
-                            {!saveError && <div className="mb-6" />}
-
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setShowSaveModal(false)}
-                                    className="flex-1 py-3 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl font-medium transition-colors"
-                                >
+                            {!saveError && <div style={{ marginBottom: 20 }} />}
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <button onClick={() => setShowSaveModal(false)} className="ath-btn ath-btn--ghost ath-btn--md" style={{ flex: 1 }}>
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleSaveSession}
                                     disabled={saving || !newPage || parseInt(newPage) <= (book.currentPage || 0)}
-                                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-lg shadow-blue-600/30"
+                                    className="ath-btn ath-btn--primary ath-btn--md"
+                                    style={{ flex: 1 }}
                                 >
-                                    {saving ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : <><Save size={18} /> Save</>}
+                                    {saving ? <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', animation: 'spin .8s linear infinite' }} /> : <><Save size={16} /> Save</>}
                                 </button>
                             </div>
                         </motion.div>
@@ -249,42 +222,40 @@ const ReadingTimer = ({ book, onBack }) => {
                 )}
             </AnimatePresence>
 
+            {/* Chapter prompt */}
             <AnimatePresence>
                 {showChapterPrompt && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="ath-overlay" style={{ zIndex: 60 }} onClick={() => setShowChapterPrompt(false)}>
                         <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+                            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                            style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-xl)', padding: 24, width: '100%', maxWidth: 360, boxShadow: 'var(--shadow-lg)' }}
+                            onClick={e => e.stopPropagation()}
                         >
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-                                <Sparkles size={20} className="text-purple-500" /> AI Summary
+                            <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Sparkles size={18} style={{ color: 'var(--accent)' }} /> AI Summary
                             </h3>
-                            <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
+                            <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 16, lineHeight: 1.5 }}>
                                 To generate an accurate summary without spoilers, what chapter did you just finish reading?
                             </p>
-
                             <input
                                 type="text"
                                 placeholder="e.g. Chapter 4 or The Gathering"
                                 value={chapterInput}
-                                onChange={(e) => setChapterInput(e.target.value)}
-                                className="w-full px-4 py-3 text-base bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none dark:text-white mb-2"
+                                onChange={e => setChapterInput(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleGenerateSummary()}
+                                className="ath-input"
                                 autoFocus
+                                style={{ marginBottom: 8 }}
                             />
-
-                            <div className="flex gap-3 mt-6">
-                                <button
-                                    onClick={() => setShowChapterPrompt(false)}
-                                    className="flex-1 py-3 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl font-medium transition-colors"
-                                >
+                            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                                <button onClick={() => setShowChapterPrompt(false)} className="ath-btn ath-btn--ghost ath-btn--md" style={{ flex: 1 }}>
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleGenerateSummary}
                                     disabled={!chapterInput.trim() || summaryLoading}
-                                    className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex justify-center items-center"
+                                    className="ath-btn ath-btn--primary ath-btn--md"
+                                    style={{ flex: 1 }}
                                 >
                                     Generate
                                 </button>
@@ -294,25 +265,14 @@ const ReadingTimer = ({ book, onBack }) => {
                 )}
             </AnimatePresence>
 
-            <SummaryModal
-                isOpen={showSummary}
-                onClose={() => setShowSummary(false)}
-                summary={summaryText}
-                isLoading={summaryLoading}
+            <SummaryModal isOpen={showSummary} onClose={() => setShowSummary(false)} summary={summaryText} isLoading={summaryLoading} />
+            <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+            <NotesModal isOpen={showNotes} onClose={() => setShowNotes(false)} bookId={book.id} bookTitle={book.title} />
+            <EntryDrawer
+                isOpen={showQuote}
+                onClose={() => setShowQuote(false)}
+                book={book}
             />
-
-            <SettingsModal
-                isOpen={showSettings}
-                onClose={() => setShowSettings(false)}
-            />
-
-            <NotesModal
-                isOpen={showNotes}
-                onClose={() => setShowNotes(false)}
-                bookId={book.id}
-                bookTitle={book.title}
-            />
-
         </div>
     );
 };
