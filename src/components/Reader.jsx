@@ -151,63 +151,6 @@ const Reader = ({ book, onBack, appTheme, onThemeChange }) => {
                 )}
             </div>
 
-<<<<<<< HEAD
-    const handleSummarize = async () => {
-        const aiSettings = getAISettings();
-        const providerConfig = PROVIDERS.find((p) => p.id === aiSettings.provider);
-        if (providerConfig?.requiresApiKey && !aiSettings.apiKey) {
-            setShowSettings(true);
-            return;
-        }
-
-        setShowSummary(true);
-        setSummaryLoading(true);
-        setSummaryText('');
-
-        try {
-            const currentLocation = renditionRef.current.location.start;
-            const epubBook = bookRef.current;
-            const chapterItem = epubBook.spine.get(currentLocation.cfi);
-            const chapterName = chapterItem.href;
-
-            let betterChapterTitle = chapterName;
-            let previousChapters = [];
-
-            const toc = epubBook.navigation.toc;
-            const currentChapterIndex = toc.findIndex(item => item.href.includes(chapterItem.href));
-
-            if (currentChapterIndex !== -1) {
-                betterChapterTitle = toc[currentChapterIndex].label;
-                previousChapters = toc.slice(0, currentChapterIndex).map(item => item.label);
-            }
-
-            const anchors = await extractChapterAnchors(epubBook, chapterItem.href);
-
-            const metadata = {
-                title: book.title,
-                author: book.author,
-                chapterName: betterChapterTitle,
-                progress: currentLocation.percentage,
-                previousChapters,
-                anchors,
-            };
-
-            const summary = await generateSummary(metadata);
-            setSummaryText(summary);
-        } catch (error) {
-            console.error(error);
-            if (error.message.includes('limit: 0')) {
-                setSummaryText('**API Key Issue:** Your AI API key may be invalid or restricted. Please verify your AI provider settings.');
-            } else if (error.message.includes('Too many requests')) {
-                setSummaryText(`🚦 **Slow down:** ${error.message}`);
-            } else {
-                setSummaryText(`Error: ${error.message}. Please check your AI settings.`);
-            }
-        } finally {
-            setSummaryLoading(false);
-        }
-    };
-=======
             <TocSidebar
                 showToc={showToc}
                 setShowToc={setShowToc}
@@ -232,7 +175,6 @@ const Reader = ({ book, onBack, appTheme, onThemeChange }) => {
                 location={location}
                 viewerRef={viewerRef}
             />
->>>>>>> d7159da (feat: implement Atheneum design system — SVG logo, welcome screen, AI sheets, insights polish)
 
             <ReaderFooter
                 showControls={showControls}

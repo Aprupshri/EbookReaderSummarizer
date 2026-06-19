@@ -183,6 +183,7 @@ const AddPhysicalBook = ({ onClose, onBookAdded }) => {
                     <button className="ath-iconbtn" onClick={onClose} aria-label="Close"><X size={18} /></button>
                 </div>
 
+                <div className="ath-modal-body">
                     {!showManualEntry ? (
                         <form onSubmit={searchBook} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 

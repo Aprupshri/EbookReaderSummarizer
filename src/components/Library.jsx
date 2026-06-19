@@ -310,7 +310,6 @@ const Library = ({ onOpenBook, showDiscoverOnMount, onDiscoverClose }) => {
                       Add Physical Book
                     </button>
                   </div>
->>>>>>> d7159da (feat: implement Atheneum design system — SVG logo, welcome screen, AI sheets, insights polish)
                 )}
               </div>
             </div>
