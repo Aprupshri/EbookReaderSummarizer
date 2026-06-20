@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Trash2, Edit3, AlignLeft, BookMarked, MessageSquare, Sparkles } from 'lucide-react';
-import { getHighlights, deleteHighlight, getSummaries, deleteSummary, getEntriesByBook, deleteEntry } from '../utils/storage';
+import { getHighlights, deleteHighlight, getSummaries, deleteSummary, getEntriesByBook, deleteEntry, migrateLegacyExplanations } from '../utils/storage';
 import ReactMarkdown from 'react-markdown';
 
 const formatDate = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
@@ -15,6 +15,7 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
     const loadNotes = async () => {
         setLoading(true);
         try {
+            await migrateLegacyExplanations(bookId);
             const h = await getHighlights(bookId);
             setHighlights(h.sort((a, b) => b.timestamp - a.timestamp));
             const s = await getSummaries(bookId);

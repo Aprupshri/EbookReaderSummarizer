@@ -227,6 +227,38 @@ export const getAllEntries = async () => {
   return all.sort((a, b) => b.timestamp - a.timestamp);
 };
 
+/**
+ * One-time migration: earlier builds saved AI explanations as highlights
+ * (color 'purple', explanation in `note`, cfiRange null). Those never showed
+ * in the Commonplace Book and — because they share a null cfiRange — deleting
+ * one would delete them all. Move any such highlights into CP_STORE as proper
+ * entries (unique ids, safely deletable) and strip them from the book.
+ * Returns the number migrated.
+ */
+export const migrateLegacyExplanations = async (bookId) => {
+  const db = await initDB();
+  const book = await db.get(STORE_NAME, bookId);
+  if (!book || !book.highlights) return 0;
+  const legacy = book.highlights.filter(h => h.color === 'purple' && h.note);
+  if (legacy.length === 0) return 0;
+  for (const h of legacy) {
+    await db.add(CP_STORE, {
+      bookId,
+      bookTitle: book.title || 'Unknown Book',
+      bookAuthor: book.author || 'Unknown Author',
+      quote: h.text,
+      myNote: h.note,
+      tags: ['ai-explanation'],
+      chapter: '',
+      cfi: h.cfiRange || null,
+      timestamp: h.timestamp || Date.now(),
+    });
+  }
+  book.highlights = book.highlights.filter(h => !(h.color === 'purple' && h.note));
+  await db.put(STORE_NAME, book);
+  return legacy.length;
+};
+
 /** Get entries for a specific book. */
 export const getEntriesByBook = async (bookId) => {
   const db = await initDB();
