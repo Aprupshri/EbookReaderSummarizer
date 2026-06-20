@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, Trash2, Edit3, AlignLeft, BookMarked, MessageSquare } from 'lucide-react';
-import { getHighlights, deleteHighlight, getSummaries, deleteSummary } from '../utils/storage';
+import { X, Trash2, Edit3, AlignLeft, BookMarked, MessageSquare, Sparkles } from 'lucide-react';
+import { getHighlights, deleteHighlight, getSummaries, deleteSummary, getEntriesByBook, deleteEntry } from '../utils/storage';
 import ReactMarkdown from 'react-markdown';
 
 const formatDate = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
@@ -9,6 +9,7 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
     const [activeTab, setActiveTab] = useState('highlights');
     const [highlights, setHighlights] = useState([]);
     const [summaries, setSummaries] = useState([]);
+    const [explanations, setExplanations] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const loadNotes = async () => {
@@ -18,6 +19,8 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
             setHighlights(h.sort((a, b) => b.timestamp - a.timestamp));
             const s = await getSummaries(bookId);
             setSummaries(s.sort((a, b) => b.timestamp - a.timestamp));
+            const entries = await getEntriesByBook(bookId);
+            setExplanations(entries.filter(e => (e.tags || []).includes('ai-explanation')));
         } catch {}
         setLoading(false);
     };
@@ -37,11 +40,18 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
         await loadNotes();
     };
 
+    const handleDeleteExplanation = async (id) => {
+        if (!window.confirm('Delete this explanation?')) return;
+        await deleteEntry(id);
+        await loadNotes();
+    };
+
     if (!isOpen) return null;
 
     const TABS = [
-        { key: 'highlights', label: 'Highlights', count: highlights.length },
-        { key: 'summaries',  label: 'Summaries',  count: summaries.length },
+        { key: 'highlights',   label: 'Highlights',   count: highlights.length },
+        { key: 'explanations', label: 'Explanations', count: explanations.length },
+        { key: 'summaries',    label: 'Summaries',    count: summaries.length },
     ];
 
     return (
@@ -80,6 +90,32 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
                     {loading ? (
                         <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
                             <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid var(--line)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite' }} />
+                        </div>
+
+                    ) : activeTab === 'explanations' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {explanations.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-faint)' }}>
+                                    <Sparkles size={28} style={{ margin: '0 auto 10px', opacity: .3 }} />
+                                    <p style={{ fontSize: 14 }}>No saved explanations yet.</p>
+                                    <p style={{ fontSize: 13, marginTop: 4, opacity: .7 }}>Select text while reading, tap Explain, then Save.</p>
+                                </div>
+                            ) : explanations.map((e) => (
+                                <div key={e.id} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: '14px 16px', borderLeft: '3px solid var(--accent)' }}>
+                                    <blockquote className="serif" style={{ fontSize: 14, lineHeight: 1.5, fontStyle: 'italic', color: 'var(--ink)', marginBottom: 10, opacity: .75 }}>
+                                        "{e.quote}"
+                                    </blockquote>
+                                    <div style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink)' }}>
+                                        <ReactMarkdown>{e.myNote}</ReactMarkdown>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+                                        <span className="label-cat" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>{formatDate(e.timestamp)}</span>
+                                        <button onClick={() => handleDeleteExplanation(e.id)} className="ath-iconbtn" style={{ width: 28, height: 28, opacity: .4 }} title="Delete">
+                                            <Trash2 size={13} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
                     ) : activeTab === 'highlights' ? (
