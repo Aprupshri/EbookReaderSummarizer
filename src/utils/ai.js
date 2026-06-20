@@ -420,7 +420,23 @@ const ollamaSummary = async (metadata, model, baseUrl) => {
   return text;
 };
 
-const callAIWithPrompt = async (prompt) => {
+/**
+ * Returns true when the currently selected provider has everything it needs
+ * to make a request (an API key, unless the provider is keyless like Ollama).
+ */
+export const hasAIConfigured = () => {
+  const { provider, apiKey } = getAISettings();
+  const providerConfig = PROVIDERS.find((p) => p.id === provider);
+  if (!providerConfig) return false;
+  return providerConfig.requiresApiKey ? !!apiKey : true;
+};
+
+/**
+ * Sends a single text prompt to the configured provider and returns the reply.
+ * This is the shared entry point for every free-form AI feature (explain,
+ * follow-up, recall, orientation, knowledge-base answers).
+ */
+export const generateText = async (prompt) => {
   const { provider, apiKey, model, ollamaBaseUrl } = getAISettings();
   const providerConfig = PROVIDERS.find((p) => p.id === provider);
   if (providerConfig?.requiresApiKey && !apiKey) {
@@ -532,7 +548,7 @@ RULES:
 - Write in clear, warm, engaging prose. Maximum 200 words. No bullet points.
 - Do NOT spoil events that happen after the current chapter.`;
 
-  return callAIWithPrompt(prompt);
+  return generateText(prompt);
 };
 
 export const generateFollowUp = async (ctx) => {
@@ -549,7 +565,68 @@ The reader now asks: "${question}"
 
 Answer their follow-up question concisely and helpfully in 100–150 words. Warm tone, plain prose. No bullet points. Do not spoil future events.`;
 
-  return callAIWithPrompt(prompt);
+  return generateText(prompt);
+};
+
+/**
+ * Warm, narrative "where you left off" recap for a reader returning to a book.
+ * @param {object} metadata - { title, author, chapterName, progress, previousChapters, anchors }
+ * @param {'quick'|'standard'|'detailed'} length
+ */
+export const generateRecall = async (metadata, length = 'standard') => {
+  const { title, author, chapterName, progress, previousChapters, anchors } = metadata;
+  const chapterList = previousChapters && previousChapters.length > 0
+    ? previousChapters.join(', ')
+    : 'the beginning';
+  const anchorContext = anchors?.start
+    ? `The last section they were reading started with: "${anchors.start}..."`
+    : '';
+  const lengthInstructions = {
+    quick: 'Respond in exactly 2 warm, engaging sentences. Be concise but evocative.',
+    standard: 'Respond in 150–200 words of flowing, warm narrative prose.',
+    detailed: 'Respond in up to 400 words of rich, warm narrative prose.',
+  };
+
+  const prompt = `You are a warm, enthusiastic reading companion for the Atheneum app.
+
+The user is returning to read "${title}" by ${author} after being away for a few days.
+They are ${(parseFloat(progress) * 100).toFixed(0)}% through the book.
+Chapters they have already read: ${chapterList}.
+They were last reading chapter: "${chapterName || 'an early section'}".
+${anchorContext}
+
+Your task: Write a friendly, narrative recap to help them remember where they left off — like a knowledgeable friend catching them up before they dive back in.
+
+CRITICAL RULES:
+- Write in warm, flowing PROSE. DO NOT use bullet points, headers, or lists.
+- DO NOT spoil anything that happens AFTER "${chapterName}". Only recap what has already happened.
+- DO NOT invent plot points. If you are unsure, be vague and focus on tone and character feelings.
+- ${lengthInstructions[length] || lengthInstructions.standard}
+- End with a single short sentence of encouragement to jump back in.`;
+
+  return generateText(prompt);
+};
+
+/**
+ * Enticing orientation card for a book the user is opening for the first time.
+ * @param {object} metadata - { title, author }
+ */
+export const generateOrientation = async (metadata) => {
+  const { title, author } = metadata;
+  const prompt = `You are a warm, enthusiastic reading companion for the Atheneum app.
+
+The user is about to start reading "${title}" by ${author} for the very first time.
+
+Your task: Write a short, enticing orientation to set the scene — like a knowledgeable friend giving a warm introduction before they begin.
+
+CRITICAL RULES:
+- Write in warm, flowing PROSE. DO NOT use bullet points, headers, or lists.
+- DO NOT reveal major plot twists, endings, or significant spoilers.
+- Cover: the genre/tone, the world or setting, and the emotional experience readers can expect.
+- Keep it to exactly 100–150 words.
+- End with a single short sentence of excitement to encourage them to begin.`;
+
+  return generateText(prompt);
 };
 
 export const generateSummary = async (metadata) => {

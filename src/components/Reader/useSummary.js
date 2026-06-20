@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { generateSummary } from '../../utils/gemini';
+import { generateSummary, hasAIConfigured } from '../../utils/ai';
 import { saveSummary, setBookGenre } from '../../utils/storage';
 
 /**
@@ -12,8 +12,7 @@ export const useSummary = ({ book, location, viewerRef, setShowSettings }) => {
     const [showGenrePicker, setShowGenrePicker] = useState(false);
 
     const handleSummarize = async () => {
-        const apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) { setShowSettings(true); return; }
+        if (!hasAIConfigured()) { setShowSettings(true); return; }
 
         // Genre gate — ask once before the first summary, then never again
         if (!book.genre) { setShowGenrePicker(true); return; }
@@ -30,8 +29,7 @@ export const useSummary = ({ book, location, viewerRef, setShowSettings }) => {
     };
 
     const _runSummary = async () => {
-        const apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) return; // safety guard
+        if (!hasAIConfigured()) return; // safety guard
 
         setShowSummary(true);
         setSummaryLoading(true);
@@ -80,7 +78,7 @@ export const useSummary = ({ book, location, viewerRef, setShowSettings }) => {
                 anchors,
             };
 
-            const summary = await generateSummary(metadata, apiKey);
+            const summary = await generateSummary(metadata);
             setSummaryText(summary);
             await saveSummary(book.id, betterChapterTitle, summary);
         } catch (error) {

@@ -8,17 +8,19 @@ const resource = resourceFromAttributes({
   [ATTR_SERVICE_NAME]: 'book-tracker-ui',
 });
 
-// Configure exporter to use the local Vite proxy to avoid CORS
-const exporter = new OTLPTraceExporter({
-  url: 'http://localhost:5173/v1/traces',
-});
+// Only export spans during local development. In a production / Capacitor
+// build the localhost collector doesn't exist, so attaching the exporter
+// would make the BatchSpanProcessor retry failing batches forever.
+const spanProcessors = import.meta.env.DEV
+  ? [new BatchSpanProcessor(
+      new OTLPTraceExporter({ url: 'http://localhost:5173/v1/traces' }), // local Vite proxy avoids CORS
+      { scheduledDelayMillis: 500 }, // flush quickly for local dev
+    )]
+  : [];
 
-// Pass the span processor directly in the configuration object to avoid calling addSpanProcessor
 export const provider = new WebTracerProvider({
   resource,
-  spanProcessors: [new BatchSpanProcessor(exporter, {
-    scheduledDelayMillis: 500, // Flush quickly for local dev
-  })],
+  spanProcessors,
 });
 
 provider.register();

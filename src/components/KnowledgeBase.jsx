@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Send, BookMarked, Loader, AlertCircle, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { getAllEntries } from '../utils/storage';
+import { generateText, hasAIConfigured } from '../utils/ai';
 
 const searchEntries = (query, entries) => {
     if (!query.trim() || !entries.length) return [];
@@ -94,8 +95,7 @@ const KnowledgeBase = ({ onBack }) => {
     const handleAsk = useCallback(async (q) => {
         const query = (q || question).trim();
         if (!query) return;
-        const apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) { setError('No Gemini API key found. Add it in Settings.'); return; }
+        if (!hasAIConfigured()) { setError('No AI provider configured. Add your API key in Settings.'); return; }
         if (entries.length === 0) { setError('Your Commonplace Book is empty. Save some passages while reading first!'); return; }
 
         setIsThinking(true);
@@ -112,18 +112,7 @@ const KnowledgeBase = ({ onBack }) => {
             setCitedEntries(relevant);
 
             const prompt = buildRAGPrompt(query, relevant);
-            const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-            const response = await fetch(`${API_URL}?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-            });
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error?.message || 'Gemini API error');
-            }
-            const data = await response.json();
-            const text = data.candidates[0].content.parts[0].text;
+            const text = await generateText(prompt);
             setAnswer(text);
 
             const entry = { question: query, answer: text, timestamp: Date.now(), citedCount: relevant.length };

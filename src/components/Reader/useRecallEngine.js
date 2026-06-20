@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { generateRecall, generateOrientation } from '../../utils/gemini';
+import { generateRecall, hasAIConfigured } from '../../utils/ai';
 
 /**
  * Manages the Recall Engine: auto-trigger on book open and manual recall generation.
@@ -20,8 +20,7 @@ export const useRecallEngine = ({ book, location, viewerRef, setShowSettings }) 
     // to reconnect with the book, not on every open after 3 days.
 
     const handleRecall = async (length = recallLength) => {
-        const apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) { setShowSettings(true); return; }
+        if (!hasAIConfigured()) { setShowSettings(true); return; }
 
         setRecallLength(length);
         setShowRecall(true);
@@ -70,7 +69,7 @@ export const useRecallEngine = ({ book, location, viewerRef, setShowSettings }) 
             };
             recallContextRef.current = metadata;
 
-            const text = await generateRecall(metadata, apiKey, length);
+            const text = await generateRecall(metadata, length);
             setRecallText(text);
         } catch (err) {
             setRecallError(err.message || 'Could not generate recall. Please check your API key.');

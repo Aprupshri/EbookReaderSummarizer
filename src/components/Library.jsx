@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ePub from 'epubjs';
 import { saveBook, getBooks, deleteBook } from '../utils/storage';
+import { hasAIConfigured } from '../utils/ai';
 import { Search, Plus, Trash2, BookPlus, Compass, Settings, Key, X, BookOpen, BookMarked, Upload } from 'lucide-react';
 import BookCover from './BookCover';
 import AddPhysicalBook from './AddPhysicalBook';
@@ -142,7 +143,7 @@ const Library = ({ onOpenBook, showDiscoverOnMount, onDiscoverClose }) => {
   const [isEditMode, setIsEditMode]           = useState(false);
   const [searchQuery, setSearchQuery]         = useState('');
   const [filter, setFilter]                   = useState('all');
-  const [hasApiKey, setHasApiKey]             = useState(() => !!localStorage.getItem('gemini_api_key'));
+  const [hasApiKey, setHasApiKey]             = useState(() => hasAIConfigured());
   const [dismissedBanner, setDismissedBanner] = useState(() => !!localStorage.getItem('api_banner_dismissed'));
   const [showAddMenu, setShowAddMenu]           = useState(false);
   const [revealedDeleteId, setRevealedDeleteId] = useState(null);
@@ -416,7 +417,7 @@ const Library = ({ onOpenBook, showDiscoverOnMount, onDiscoverClose }) => {
       )}
       <SettingsModal
         isOpen={showSettings}
-        onClose={() => { setShowSettings(false); const k = localStorage.getItem('gemini_api_key'); setHasApiKey(!!k); if (k) setDismissedBanner(true); }}
+        onClose={() => { setShowSettings(false); const ok = hasAIConfigured(); setHasApiKey(ok); if (ok) setDismissedBanner(true); }}
       />
       <DiscoverModal
         isOpen={showDiscover}
