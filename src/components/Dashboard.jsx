@@ -95,18 +95,14 @@ const Dashboard = ({ onBack }) => {
           </div>
 
           {/* Today vs goal ring */}
-          <div className="ath-stat anim-fade-up" style={{ animationDelay: '60ms' }}>
-            <div className="ath-stat-ringwrap">
-              <Ring value={todayMin / goal} size={88}>
-                <div className="ath-ring-num serif">{todayMin}</div>
-                <div className="label-cat">min</div>
-              </Ring>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="ath-stat-label" style={{ marginBottom: 6 }}>Today's reading</div>
-                <div className="label-cat" style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>
-                  {Math.min(100, Math.round((todayMin / goal) * 100))}% of your {goal}-min goal
-                </div>
-              </div>
+          <div className="ath-stat anim-fade-up" style={{ animationDelay: '60ms', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <Ring value={todayMin / goal} size={80}>
+              <div className="ath-ring-num serif">{todayMin}</div>
+              <div className="label-cat">min</div>
+            </Ring>
+            <div className="ath-stat-label" style={{ marginTop: 12 }}>Today's reading</div>
+            <div className="label-cat" style={{ marginTop: 4, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>
+              {Math.min(100, Math.round((todayMin / goal) * 100))}% of {goal}-min goal
             </div>
           </div>
 

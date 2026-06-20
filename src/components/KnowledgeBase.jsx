@@ -251,9 +251,9 @@ const KnowledgeBase = ({ onBack }) => {
                                         key={i}
                                         onClick={() => { setQuestion(h.question); handleAsk(h.question); }}
                                         className="ath-btn ath-btn--secondary"
-                                        style={{ textAlign: 'left', flexDirection: 'column', alignItems: 'flex-start', gap: 3, height: 'auto', padding: '12px 16px' }}
+                                        style={{ textAlign: 'left', flexDirection: 'column', alignItems: 'flex-start', gap: 3, height: 'auto', padding: '12px 16px', overflow: 'hidden', width: '100%' }}
                                     >
-                                        <span style={{ fontSize: '.9rem', color: 'var(--ink)' }}>{h.question}</span>
+                                        <span style={{ fontSize: '.9rem', color: 'var(--ink)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{h.question}</span>
                                         <span className="label-cat" style={{ textTransform: 'none', letterSpacing: 0 }}>
                                             {h.citedCount} passages · {new Date(h.timestamp).toLocaleDateString()}
                                         </span>

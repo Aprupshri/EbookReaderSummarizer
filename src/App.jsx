@@ -19,7 +19,7 @@ const NAV = [
   { id: 'commonplace', label: 'Commonplace',  Icon: BookMarked },
   { id: 'ask',         label: 'Ask',          Icon: Sparkles   },
 ];
-const MOBILE_NAV = ['library', 'discover', 'insights', 'ask'];
+const MOBILE_NAV = ['library', 'insights', 'commonplace', 'ask'];
 
 function LogoMark({ size = 34 }) {
   const uid = useId().replace(/:/g, '');
@@ -187,7 +187,9 @@ function App() {
       {/* ── READER OVERLAY ── */}
       {currentBook && (
         currentBook.type === 'physical' ? (
-          <ReadingTimer book={currentBook} onBack={() => setCurrentBook(null)} />
+          <div style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'var(--surface)', overflowY: 'auto' }}>
+            <ReadingTimer book={currentBook} onBack={() => setCurrentBook(null)} />
+          </div>
         ) : currentBook.format === 'pdf' ? (
           <PdfViewer book={currentBook} onBack={() => setCurrentBook(null)} />
         ) : (
