@@ -420,6 +420,138 @@ const ollamaSummary = async (metadata, model, baseUrl) => {
   return text;
 };
 
+const callAIWithPrompt = async (prompt) => {
+  const { provider, apiKey, model, ollamaBaseUrl } = getAISettings();
+  const providerConfig = PROVIDERS.find((p) => p.id === provider);
+  if (providerConfig?.requiresApiKey && !apiKey) {
+    throw new Error('AI API Key is missing. Please configure it in Settings.');
+  }
+
+  if (provider === 'gemini') {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const response = await fetch(`${endpoint}?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error?.message || 'Failed to call Gemini');
+    }
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error('Gemini returned an unexpected response.');
+    return text;
+  }
+
+  if (provider === 'ollama') {
+    const cleanBase = (ollamaBaseUrl || 'http://localhost:11434').replace(/\/$/, '');
+    const response = await fetch(`${cleanBase}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, stream: false, messages: [{ role: 'user', content: prompt }] }),
+    });
+    if (!response.ok) throw new Error('Failed to connect to Ollama. Is it running?');
+    const payload = await response.json();
+    const text = payload?.message?.content;
+    if (!text) throw new Error('Ollama returned an unexpected response.');
+    return text;
+  }
+
+  if (provider === 'cohere') {
+    const response = await fetch('https://api.cohere.com/v2/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }] }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.message || 'Failed to call Cohere');
+    }
+    const payload = await response.json();
+    const text = payload?.message?.content?.[0]?.text;
+    if (!text) throw new Error('Cohere returned an unexpected response.');
+    return text;
+  }
+
+  if (provider === 'huggingface') {
+    const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ inputs: prompt, parameters: { max_new_tokens: 400, return_full_text: false } }),
+    });
+    if (!response.ok) throw new Error('Failed to call HuggingFace');
+    const payload = await response.json();
+    const text = Array.isArray(payload) ? payload[0]?.generated_text : payload?.generated_text;
+    if (!text) throw new Error('HuggingFace returned an unexpected response.');
+    return text;
+  }
+
+  // OpenAI-compat: openrouter, groq, together, deepinfra
+  const url = OPENAI_COMPAT_URLS[provider];
+  if (!url) throw new Error(`Unsupported provider: ${provider}`);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 400,
+      temperature: 0.7,
+    }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error?.message || `Failed to call ${provider}`);
+  }
+  const payload = await response.json();
+  const text = payload?.choices?.[0]?.message?.content;
+  if (!text) throw new Error(`${provider} returned an unexpected response.`);
+  return text;
+};
+
+export const generateExplain = async (ctx) => {
+  const { selectedText, bookTitle, bookAuthor, chapterName, surroundingText } = ctx;
+  const contextBlock = surroundingText
+    ? `\n\nThe passage around the selection (for scene context):\n"...${surroundingText}..."`
+    : '';
+  const prompt = `You are an insightful literary companion inside the Atheneum reading app.
+
+The reader is reading "${bookTitle}" by ${bookAuthor}, currently in "${chapterName || 'an early chapter'}".
+
+They have selected the following text:
+"${selectedText}"
+${contextBlock}
+
+Your task: Explain this selection in a way that is deeply useful to THIS reader at THIS moment.
+
+RULES:
+- Explain what this means in the context of the scene, characters, themes, and tone of the book.
+- If it's a word or phrase, explain its meaning AND its narrative significance here.
+- If it's a concept, metaphor, or reference (literary, historical, cultural), explain what it means and why the author used it.
+- Write in clear, warm, engaging prose. Maximum 200 words. No bullet points.
+- Do NOT spoil events that happen after the current chapter.`;
+
+  return callAIWithPrompt(prompt);
+};
+
+export const generateFollowUp = async (ctx) => {
+  const { selectedText, explanation, question, bookTitle, bookAuthor, chapterName } = ctx;
+  const prompt = `You are an insightful literary companion inside the Atheneum reading app.
+
+The reader is reading "${bookTitle}" by ${bookAuthor}, in "${chapterName || 'an early chapter'}".
+
+The selected passage: "${selectedText}"
+
+You already explained: "${explanation}"
+
+The reader now asks: "${question}"
+
+Answer their follow-up question concisely and helpfully in 100–150 words. Warm tone, plain prose. No bullet points. Do not spoil future events.`;
+
+  return callAIWithPrompt(prompt);
+};
+
 export const generateSummary = async (metadata) => {
   const { provider, apiKey, model, ollamaBaseUrl } = getAISettings();
 

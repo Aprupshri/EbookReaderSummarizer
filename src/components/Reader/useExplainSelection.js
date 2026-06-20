@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
-import { generateExplain, generateFollowUp } from '../../utils/gemini';
-import { saveHighlight } from '../../utils/storage';
+import { generateExplain, generateFollowUp, getAISettings, PROVIDERS } from '../../utils/ai';
+import { saveHighlight, saveEntry } from '../../utils/storage';
 
 /**
  * Manages text selection, highlight, dictionary lookup, and AI explain flow.
@@ -47,8 +47,9 @@ export const useExplainSelection = ({ book, location, viewerRef, setShowSettings
 
     const handleExplain = async () => {
         if (!selection) return;
-        const apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) { setShowSettings(true); return; }
+        const aiSettings = getAISettings();
+        const providerCfg = PROVIDERS.find(p => p.id === aiSettings.provider);
+        if (providerCfg?.requiresApiKey && !aiSettings.apiKey) { setShowSettings(true); return; }
 
         const view = viewerRef.current;
         const foliateBook = view?.book;
@@ -82,7 +83,7 @@ export const useExplainSelection = ({ book, location, viewerRef, setShowSettings
         clearSelection();
 
         try {
-            const text = await generateExplain(ctx, apiKey);
+            const text = await generateExplain(ctx);
             setExplainText(text);
         } catch (err) {
             setExplainError(err.message || 'Could not explain. Please check your API key.');
@@ -94,7 +95,16 @@ export const useExplainSelection = ({ book, location, viewerRef, setShowSettings
     const handleExplainSave = async () => {
         if (!explainContextRef.current || !explainText) return;
         try {
-            await saveHighlight(book.id, null, explainContextRef.current.selectedText, 'purple', explainText);
+            await saveEntry({
+                bookId: book.id,
+                bookTitle: explainContextRef.current.bookTitle,
+                bookAuthor: explainContextRef.current.bookAuthor,
+                quote: explainContextRef.current.selectedText,
+                myNote: explainText,
+                tags: ['ai-explanation'],
+                chapter: explainContextRef.current.chapterName || '',
+                cfi: null,
+            });
             setExplainSaved(true);
         } catch (e) {
             console.warn('Could not save explanation', e);
@@ -102,9 +112,10 @@ export const useExplainSelection = ({ book, location, viewerRef, setShowSettings
     };
 
     const handleExplainFollowUp = async (question) => {
-        const apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) throw new Error('No API key');
-        return generateFollowUp({ ...explainContextRef.current, explanation: explainText, question }, apiKey);
+        const aiSettings = getAISettings();
+        const providerCfg = PROVIDERS.find(p => p.id === aiSettings.provider);
+        if (providerCfg?.requiresApiKey && !aiSettings.apiKey) throw new Error('No API key configured');
+        return generateFollowUp({ ...explainContextRef.current, explanation: explainText, question });
     };
 
     return {

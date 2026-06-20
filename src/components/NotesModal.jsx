@@ -37,12 +37,10 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
         await loadNotes();
     };
 
-    const regularHighlights = highlights.filter(h => !h.note);
-
     if (!isOpen) return null;
 
     const TABS = [
-        { key: 'highlights', label: 'Highlights', count: regularHighlights.length },
+        { key: 'highlights', label: 'Highlights', count: highlights.length },
         { key: 'summaries',  label: 'Summaries',  count: summaries.length },
     ];
 
@@ -86,13 +84,13 @@ const NotesModal = ({ isOpen, onClose, bookId, bookTitle, onDeleteHighlight, onC
 
                     ) : activeTab === 'highlights' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {regularHighlights.length === 0 ? (
+                            {highlights.length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-faint)' }}>
                                     <Edit3 size={28} style={{ margin: '0 auto 10px', opacity: .3 }} />
                                     <p style={{ fontSize: 14 }}>No highlights yet.</p>
                                     <p style={{ fontSize: 13, marginTop: 4, opacity: .7 }}>Select text while reading to add one.</p>
                                 </div>
-                            ) : regularHighlights.map((h, i) => (
+                            ) : highlights.map((h, i) => (
                                 <div
                                     key={i}
                                     onClick={() => h.cfiRange && onClickHighlight?.(h.cfiRange)}
