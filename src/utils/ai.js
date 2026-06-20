@@ -12,16 +12,12 @@ export const PROVIDERS = [
     apiKeyHelp: 'Get your key at',
     apiKeyHelpUrl: 'https://openrouter.ai/keys',
     models: [
-      'mistralai/mistral-7b-instruct:free',
-      'meta-llama/llama-3.2-3b-instruct:free',
-      'google/gemma-3-4b-it:free',
-      'meta-llama/llama-2-7b-chat:free',
-      'nousresearch/nous-hermes-2-mistral-7b-dpo:free',
-      'openchat/openchat-3.5:free',
-      'gpt-3.5-turbo',
-      'gpt-4-turbo',
-      'mistralai/mistral-large',
-      'meta-llama/llama-3-70b-instruct',
+      'openai/gpt-oss-120b:free',
+      'openai/gpt-oss-20b:free',
+      'google/gemma-4-31b-it:free',
+      'nvidia/nemotron-nano-9b-v2:free',
+      'meta-llama/llama-3.3-70b-instruct',
+      'deepseek/deepseek-chat',
     ],
   },
   {
@@ -34,10 +30,10 @@ export const PROVIDERS = [
     apiKeyHelpUrl: 'https://aistudio.google.com/app/apikey',
     models: [
       'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-      'gemini-1.5-pro',
-      'gemini-pro',
+      'gemini-3.5-flash',
+      'gemini-2.5-pro',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash-lite',
     ],
   },
   {
@@ -50,12 +46,9 @@ export const PROVIDERS = [
     apiKeyHelpUrl: 'https://console.groq.com/keys',
     models: [
       'llama-3.3-70b-versatile',
-      'llama-3.1-70b-versatile',
       'llama-3.1-8b-instant',
-      'gemma2-9b-it',
-      'gemma-7b-it',
-      'mixtral-8x7b-32768',
-      'mistral-7b-instruct-v0.2',
+      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
     ],
   },
   {
@@ -67,13 +60,11 @@ export const PROVIDERS = [
     apiKeyHelp: 'Get your key at',
     apiKeyHelpUrl: 'https://api.together.xyz/settings/api-keys',
     models: [
-      'meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo',
-      'meta-llama/Llama-3-70B-Chat-Turbo',
-      'mistralai/Mistral-7B-Instruct-v0.3',
-      'mistralai/Mistral-Large-Instruct-2407',
-      'google/gemma-2-9b-it',
-      'NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO',
-      'teknium/OpenHermes-2.5-Mistral-7B',
+      'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+      'deepseek-ai/DeepSeek-V3.1',
+      'Qwen/Qwen2.5-72B-Instruct-Turbo',
+      'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+      'mistralai/Mistral-Small-24B-Instruct-2501',
     ],
   },
   {
@@ -85,12 +76,11 @@ export const PROVIDERS = [
     apiKeyHelp: 'Get your key at',
     apiKeyHelpUrl: 'https://deepinfra.com/dash/api_keys',
     models: [
-      'meta-llama/Meta-Llama-3.1-70B-Instruct',
-      'meta-llama/Meta-Llama-3.1-8B-Instruct',
-      'mistralai/Mistral-7B-Instruct-v0.3',
+      'meta-llama/Llama-3.3-70B-Instruct',
+      'deepseek-ai/DeepSeek-V3.1',
       'Qwen/Qwen2.5-72B-Instruct',
-      'NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO',
-      'mistralai/Mistral-Large',
+      'meta-llama/Meta-Llama-3.1-8B-Instruct',
+      'zai-org/GLM-5.2',
     ],
   },
   {
@@ -102,11 +92,11 @@ export const PROVIDERS = [
     apiKeyHelp: 'Get your free trial key at',
     apiKeyHelpUrl: 'https://dashboard.cohere.com/api-keys',
     models: [
-      'command-r-plus',
-      'command-r',
-      'command-r-v1:7k-token',
-      'command-light',
-      'command-nightly',
+      'command-a-03-2025',
+      'command-a-plus-05-2026',
+      'command-r-plus-08-2024',
+      'command-r-08-2024',
+      'command-r7b-12-2024',
     ],
   },
   {
@@ -115,15 +105,14 @@ export const PROVIDERS = [
     requiresApiKey: true,
     requiresBaseUrl: false,
     apiKeyLabel: 'HuggingFace Token',
-    apiKeyHelp: 'Create a token with Inference API access at',
+    apiKeyHelp: 'Create a token with Inference Providers access at',
     apiKeyHelpUrl: 'https://huggingface.co/settings/tokens',
     models: [
-      'mistralai/Mistral-7B-Instruct-v0.3',
-      'HuggingFaceH4/zephyr-7b-beta',
-      'meta-llama/Llama-3.2-3B-Instruct',
-      'meta-llama/Meta-Llama-3-8B-Instruct',
-      'mistralai/Mistral-Large',
-      'NousResearch/Nous-Hermes-2-Mistral-7B-DPO',
+      'meta-llama/Llama-3.3-70B-Instruct',
+      'deepseek-ai/DeepSeek-V3.1',
+      'Qwen/Qwen2.5-72B-Instruct',
+      'mistralai/Mistral-Small-24B-Instruct-2501',
+      'meta-llama/Llama-3.1-8B-Instruct',
     ],
   },
   {
@@ -136,30 +125,31 @@ export const PROVIDERS = [
     apiKeyHelpUrl: 'https://ollama.com',
     defaultBaseUrl: 'http://localhost:11434',
     models: [
+      'llama3.3',
       'llama3.2',
-      'llama3.1',
-      'llama2',
-      'mistral',
-      'neural-chat',
+      'qwen3',
+      'qwen2.5',
       'gemma3',
       'phi4',
-      'dolphin-mixtral',
+      'mistral',
+      'deepseek-r1',
     ],
   },
 ];
 
 const DEFAULTS = {
   provider: 'openrouter',
-  model: 'mistralai/mistral-7b-instruct:free',
+  model: 'openai/gpt-oss-120b:free',
   apiKey: '',
   ollamaBaseUrl: 'http://localhost:11434',
 };
 
 const OPENAI_COMPAT_URLS = {
-  openrouter: 'https://openrouter.ai/v1/chat/completions',
+  openrouter: 'https://openrouter.ai/api/v1/chat/completions',
   groq: 'https://api.groq.com/openai/v1/chat/completions',
   together: 'https://api.together.xyz/v1/chat/completions',
   deepinfra: 'https://api.deepinfra.com/v1/openai/chat/completions',
+  huggingface: 'https://router.huggingface.co/v1/chat/completions',
 };
 
 const buildPrompt = (metadata) => {
@@ -188,11 +178,25 @@ Structure your response as markdown with bullets, a short key characters section
 Keep it under 400 words.`;
 };
 
+// If a stored model id is no longer offered by its provider (e.g. it was
+// retired since the user last saved), fall back to the provider's first
+// model so AI calls don't 404. Ollama is skipped — its list is only a
+// suggestion and users may run any locally-pulled model.
+const sanitizeModel = (settings) => {
+  if (settings.provider === 'ollama') return settings;
+  const config = PROVIDERS.find((p) => p.id === settings.provider);
+  const models = config?.models ?? [];
+  if (models.length && !models.includes(settings.model)) {
+    return { ...settings, model: models[0] };
+  }
+  return settings;
+};
+
 export const getAISettings = () => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return { ...DEFAULTS, ...JSON.parse(stored) };
+      return sanitizeModel({ ...DEFAULTS, ...JSON.parse(stored) });
     }
   } catch {
     // ignore parse errors
@@ -350,41 +354,6 @@ const cohereSummary = async (metadata, apiKey, model) => {
   return text;
 };
 
-const huggingFaceSummary = async (metadata, apiKey, model) => {
-  const prompt = buildPrompt(metadata);
-  const url = `https://api-inference.huggingface.co/models/${model}`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      inputs: prompt,
-      parameters: {
-        max_new_tokens: 500,
-        temperature: 0.7,
-        return_full_text: false,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || 'Failed to generate summary with HuggingFace');
-  }
-
-  const payload = await response.json();
-  const text = Array.isArray(payload) ? payload[0]?.generated_text : payload?.generated_text;
-
-  if (!text) {
-    throw new Error('HuggingFace returned an unexpected response structure.');
-  }
-
-  return text;
-};
-
 const ollamaSummary = async (metadata, model, baseUrl) => {
   const prompt = buildPrompt(metadata);
   const cleanBase = baseUrl.replace(/\/$/, '');
@@ -490,20 +459,7 @@ export const generateText = async (prompt) => {
     return text;
   }
 
-  if (provider === 'huggingface') {
-    const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ inputs: prompt, parameters: { max_new_tokens: 400, return_full_text: false } }),
-    });
-    if (!response.ok) throw new Error('Failed to call HuggingFace');
-    const payload = await response.json();
-    const text = Array.isArray(payload) ? payload[0]?.generated_text : payload?.generated_text;
-    if (!text) throw new Error('HuggingFace returned an unexpected response.');
-    return text;
-  }
-
-  // OpenAI-compat: openrouter, groq, together, deepinfra
+  // OpenAI-compat: openrouter, groq, together, deepinfra, huggingface
   const url = OPENAI_COMPAT_URLS[provider];
   if (!url) throw new Error(`Unsupported provider: ${provider}`);
   const response = await fetch(url, {
@@ -512,7 +468,7 @@ export const generateText = async (prompt) => {
     body: JSON.stringify({
       model,
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 400,
+      max_tokens: 800,
       temperature: 0.7,
     }),
   });
@@ -658,7 +614,7 @@ export const generateSummary = async (metadata) => {
       } else if (provider === 'cohere') {
         result = await cohereSummary(metadata, apiKey, model);
       } else if (provider === 'huggingface') {
-        result = await huggingFaceSummary(metadata, apiKey, model);
+        result = await openAICompatSummary(metadata, apiKey, model, 'huggingface');
       } else if (provider === 'ollama') {
         const baseUrl = ollamaBaseUrl || 'http://localhost:11434';
         result = await ollamaSummary(metadata, model, baseUrl);

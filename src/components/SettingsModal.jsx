@@ -15,9 +15,11 @@ const SettingsModal = ({ isOpen, onClose }) => {
         setProvider(settings.provider || 'openrouter');
         setOllamaBaseUrl(settings.ollamaBaseUrl || 'http://localhost:11434');
 
+        // Fall back to the provider's first model if the saved one is no
+        // longer offered (e.g. a model id that was retired since last visit).
         const config = PROVIDERS.find((p) => p.id === (settings.provider || 'openrouter'));
-        const defaultModel = config?.models?.[0] ?? '';
-        setModel(settings.model || defaultModel);
+        const models = config?.models ?? [];
+        setModel(models.includes(settings.model) ? settings.model : (models[0] ?? ''));
     }, [isOpen]);
 
     const handleProviderChange = (newProvider) => {
