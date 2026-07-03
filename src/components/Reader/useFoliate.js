@@ -1,3 +1,4 @@
+/* global __BUILD_TIME__ */
 import { useEffect, useRef } from 'react';
 import { Overlayer } from 'foliate-js/overlayer.js';
 import { updateProgress, getHighlights } from '../../utils/storage';
@@ -303,9 +304,12 @@ export const useFoliate = ({
             };
 
             // On-device diagnostics: run `localStorage.reader_tap_debug = '1'`
-            // (then reload) to see tap coordinates on screen — iPhones have no
-            // console. Shows which zone/branch each tap resolved to.
-            const debugTap = (text) => {
+            // (then reload) to see tap + selection pipeline events on screen —
+            // phones have no console. Rolling log of the last 8 events, with
+            // the build timestamp so stale PWA installs are obvious.
+            const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev';
+            const dbgLines = [];
+            const dbg = (text) => {
                 if (localStorage.getItem('reader_tap_debug') !== '1') return;
                 let el = document.getElementById('reader-tap-debug');
                 if (!el) {
@@ -316,7 +320,9 @@ export const useFoliate = ({
                         + 'padding:6px 8px;border-radius:6px;pointer-events:none;white-space:pre-wrap;';
                     document.body.appendChild(el);
                 }
-                el.textContent = text;
+                dbgLines.push(`${new Date().toISOString().slice(14, 23)} ${text}`);
+                while (dbgLines.length > 8) dbgLines.shift();
+                el.textContent = `build ${BUILD_TIME}\n${dbgLines.join('\n')}`;
             };
 
             const handleReaderTap = (clientX) => {
@@ -330,8 +336,8 @@ export const useFoliate = ({
                 if (settingsRef.current?.flow === 'paginated') {
                     const frac = getVisiblePageFraction(clientX);
                     const r = view.renderer;
-                    debugTap(`clientX=${Math.round(clientX ?? -1)} start=${Math.round(r?.start ?? -1)} size=${Math.round(r?.size ?? -1)}\n`
-                        + `frac=${frac === null ? 'null' : frac.toFixed(3)} zone=${frac === null ? 'fallback-toggle' : frac < 0.25 ? 'left' : frac > 0.75 ? 'right' : 'middle'} bars=${showControlsRef?.current ? 'shown' : 'hidden'}`);
+                    dbg(`tap x=${Math.round(clientX ?? -1)} start=${Math.round(r?.start ?? -1)} size=${Math.round(r?.size ?? -1)}`
+                        + ` frac=${frac === null ? 'null' : frac.toFixed(2)} zone=${frac === null ? 'fallback' : frac < 0.25 ? 'left' : frac > 0.75 ? 'right' : 'mid'} bars=${showControlsRef?.current ? 'on' : 'off'}`);
                     if (frac !== null && (frac < 0.25 || frac > 0.75)) {
                         closePanels();
                         if (!isFocusModeRef.current && showControlsRef?.current) {
@@ -481,6 +487,7 @@ export const useFoliate = ({
                 } else if (elapsed > longPressMs) {
                     paginatedGesture.mode = 'select';
                 }
+                if (paginatedGesture.mode !== 'undecided') dbg(`gesture=${paginatedGesture.mode} dist=${Math.round(dist)} dt=${elapsed}`);
                 if (paginatedGesture.mode !== 'pan') ev.stopPropagation();
             }, { capture: true, passive: true });
 
@@ -578,22 +585,28 @@ export const useFoliate = ({
 
             // makeSelection — mirrors useTextSelector.ts:54-70
             // Called when a valid selection exists and we want to surface the
-            // SelectionMenu. Applies word-boundary snapping first.
+            // SelectionMenu. Applies word-boundary snapping first
+            // (snapRangeToWords: Readest's fix for cross-page boundary drift —
+            // a selection starting at the first pixel of a page can silently
+            // include hidden chars from the previous CSS column).
+            //
+            // Mouse: rebuild the browser selection so the visible highlight
+            // snaps too. Touch/pen: NEVER mutate the live selection — Chrome
+            // on Android dismisses the native drag handles the moment a script
+            // calls removeAllRanges/addRange, which collapsed selections while
+            // the user was still dragging. There we snap a CLONE purely to
+            // compute the word + CFI.
             const makeSelection = (sel) => {
                 isTextSelected.current = true;
                 try {
-                    const range = sel.getRangeAt(0);
-
-                    // snapRangeToWords: Readest's fix for cross-page boundary drift.
-                    // A selection that starts at the very first pixel of a page can
-                    // silently include trailing whitespace / hidden chars from the
-                    // previous CSS column. Snapping to the nearest word boundary
-                    // pulls the range back onto the visible page (sel.ts:224-268).
+                    const isTouch = lastPointerType.current === 'touch' || lastPointerType.current === 'pen';
+                    const range = isTouch ? sel.getRangeAt(0).cloneRange() : sel.getRangeAt(0);
                     snapRangeToWords(range);
 
-                    // Rebuild the browser selection so the visual highlight snaps too
-                    sel.removeAllRanges();
-                    sel.addRange(range);
+                    if (!isTouch) {
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    }
 
                     const word = range.toString().trim();
                     if (!word) return;
@@ -601,6 +614,7 @@ export const useFoliate = ({
                     hadActiveSelection = true;
                     lastSelectionAt = Date.now();
 
+                    dbg(`makeSel len=${word.length} touch=${isTouch}`);
                     setSelection({ word, cfiRange: view.getCFI(index, range) });
                 } catch (e) {
                     console.warn('[selection] makeSelection error:', e);
@@ -622,6 +636,7 @@ export const useFoliate = ({
                     hadActiveSelection = true;
                     lastSelectionAt = Date.now();
 
+                    dbg(`makeSelIOS len=${word.length}`);
                     setTimeout(() => {
                         sel.removeAllRanges();
                         setTimeout(() => {
@@ -656,6 +671,7 @@ export const useFoliate = ({
                 if (sel && sel.toString().trim().length > 0 && sel.rangeCount > 0) {
                     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
                     const pointerInside = isPointerInsideSelection(sel, ev);
+                    dbg(`pu sel=${sel.toString().trim().length} inside=${pointerInside} ios=${isIOS}`);
 
                     if (pointerInside && isIOS) {
                         makeSelectionOnIOS(sel);
@@ -674,6 +690,7 @@ export const useFoliate = ({
             // Fired by Android WebView when the OS takes over scroll handling.
             // Just unlock scroll; selectionchange will fire if text was selected.
             doc.addEventListener('pointercancel', () => {
+                dbg('pc');
                 scrollUnlock();
             });
 
@@ -691,6 +708,7 @@ export const useFoliate = ({
                 const hasText = sel && sel.toString().trim().length > 0 && sel.rangeCount > 0;
 
                 if (hasText) {
+                    if (!hadActiveSelection) dbg(`selstart type=${lastPointerType.current}`);
                     hadActiveSelection = true;
                     lastSelectionAt = Date.now();
                     // Lock so handles can't trigger page flip
@@ -711,7 +729,7 @@ export const useFoliate = ({
                         }, 300);
                     }
                 } else {
-                    if (hadActiveSelection) lastSelectionClearAt = Date.now();
+                    if (hadActiveSelection) { lastSelectionClearAt = Date.now(); dbg('selclear'); }
                     hadActiveSelection = false;
                     isTextSelected.current = false;
                     scrollUnlock();
