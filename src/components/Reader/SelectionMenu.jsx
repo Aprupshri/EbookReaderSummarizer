@@ -19,8 +19,11 @@ const SelectionMenu = ({
     return (
         <div
             style={{
-                position: 'absolute', bottom: 64, left: '50%', transform: 'translateX(-50%)',
-                zIndex: 50,
+                // Clear the reader footer (~70px + safe-area, z-index 60) so the
+                // progress slider never covers the menu when the bars are visible.
+                position: 'absolute', bottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
+                left: '50%', transform: 'translateX(-50%)',
+                zIndex: 70,
                 background: 'var(--surface)',
                 borderRadius: 99,
                 boxShadow: '0 8px 32px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.1)',
