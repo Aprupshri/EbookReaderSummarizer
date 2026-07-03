@@ -23,6 +23,9 @@ export const useReader = ({ book, onBack }) => {
 
     // UI visibility toggles
     const [showControls, setShowControls] = useState(true);
+    // Ref mirror for handlers that live inside the Foliate iframe closure
+    const showControlsRef = useRef(showControls);
+    useEffect(() => { showControlsRef.current = showControls; }, [showControls]);
     const [showSettings, setShowSettings] = useState(false);
     const [showAppearance, setShowAppearance] = useState(false);
     const [showToc, setShowToc] = useState(false);
@@ -60,6 +63,7 @@ export const useReader = ({ book, onBack }) => {
         setLoadError,
         setSelection: explain.setSelection,
         setShowControls,
+        showControlsRef,
         setShowAppearance,
         setShowToc,
         setShowSettings,
@@ -117,8 +121,6 @@ export const useReader = ({ book, onBack }) => {
 
         // Domain handlers
         handleBack,
-        handlePrev: () => viewerRef.current?.prev(),
-        handleNext: () => viewerRef.current?.next(),
 
         // Summary
         ...summary,

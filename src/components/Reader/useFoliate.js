@@ -3,7 +3,6 @@ import { Overlayer } from 'foliate-js/overlayer.js';
 import { updateProgress, getHighlights } from '../../utils/storage';
 import {
     snapRangeToWords,
-    isValidSelection,
     isPointerInsideSelection,
 } from '../../utils/selectionUtils';
 
@@ -98,6 +97,7 @@ export const useFoliate = ({
     setLoadError,
     setSelection,
     setShowControls,
+    showControlsRef,
     setShowAppearance,
     setShowToc,
     setShowSettings,
@@ -270,16 +270,86 @@ export const useFoliate = ({
                 return typeof target.closest === 'function' ? target : target.parentElement;
             };
 
-            const handleReaderTap = () => {
+            // Tap zones (Readest usePagination.ts pattern): in paginated mode the
+            // left/right quarters of the visible page flip pages and the middle
+            // half toggles the toolbar — but if the toolbar is currently visible,
+            // an edge tap just hides it instead of flipping (Readest does the
+            // same), so any tap dismisses the bars.
+            //
+            // Zone math: the tap's clientX is in the iframe's coordinate space,
+            // which spans ALL CSS columns; the currently visible page is the
+            // window [renderer.start, renderer.start + renderer.size). Deriving
+            // the zone from clientX - renderer.start is dpr/orientation-proof,
+            // unlike event.screenX, which iOS WebKit does not report reliably
+            // from inside iframes. Falls back to a toolbar toggle if the
+            // fraction can't be computed — never to an accidental page flip.
+            const getVisiblePageFraction = (clientX) => {
+                const r = view.renderer;
+                if (typeof clientX !== 'number' || !r?.size) return null;
+
+                // Per spec, clientX inside the iframe is in full column-strip
+                // coordinates, so the visible page is [start, start + size).
+                let frac = (clientX - r.start) / r.size;
+                if (Number.isFinite(frac) && frac >= 0 && frac <= 1) return frac;
+
+                // iOS WebKit quirk: some versions report iframe touch/click
+                // coordinates relative to the visible viewport instead. Then
+                // clientX already sits within the visible page. The two cases
+                // can't collide: past the first page, the strip interpretation
+                // above goes negative whenever coordinates are viewport-based,
+                // and on the first page (start = 0) both agree anyway.
+                frac = clientX / r.size;
+                return Number.isFinite(frac) && frac >= 0 && frac <= 1 ? frac : null;
+            };
+
+            // On-device diagnostics: run `localStorage.reader_tap_debug = '1'`
+            // (then reload) to see tap coordinates on screen — iPhones have no
+            // console. Shows which zone/branch each tap resolved to.
+            const debugTap = (text) => {
+                if (localStorage.getItem('reader_tap_debug') !== '1') return;
+                let el = document.getElementById('reader-tap-debug');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'reader-tap-debug';
+                    el.style.cssText = 'position:fixed;bottom:72px;left:8px;right:8px;z-index:9999;'
+                        + 'background:rgba(0,0,0,.82);color:#7fff7f;font:11px/1.5 monospace;'
+                        + 'padding:6px 8px;border-radius:6px;pointer-events:none;white-space:pre-wrap;';
+                    document.body.appendChild(el);
+                }
+                el.textContent = text;
+            };
+
+            const handleReaderTap = (clientX) => {
+                const closePanels = () => {
+                    setShowAppearance(false);
+                    setShowToc(false);
+                    setShowSettings(false);
+                    setShowNotes(false);
+                };
+
+                if (settingsRef.current?.flow === 'paginated') {
+                    const frac = getVisiblePageFraction(clientX);
+                    const r = view.renderer;
+                    debugTap(`clientX=${Math.round(clientX ?? -1)} start=${Math.round(r?.start ?? -1)} size=${Math.round(r?.size ?? -1)}\n`
+                        + `frac=${frac === null ? 'null' : frac.toFixed(3)} zone=${frac === null ? 'fallback-toggle' : frac < 0.25 ? 'left' : frac > 0.75 ? 'right' : 'middle'} bars=${showControlsRef?.current ? 'shown' : 'hidden'}`);
+                    if (frac !== null && (frac < 0.25 || frac > 0.75)) {
+                        closePanels();
+                        if (!isFocusModeRef.current && showControlsRef?.current) {
+                            setShowControls(false);
+                            return;
+                        }
+                        if (frac < 0.25) view.prev();
+                        else view.next();
+                        return;
+                    }
+                }
+
                 if (isFocusModeRef.current) {
                     setShowFocusExit(prev => !prev);
                     return;
                 }
 
-                setShowAppearance(false);
-                setShowToc(false);
-                setShowSettings(false);
-                setShowNotes(false);
+                closePanels();
                 setShowControls(prev => !prev);
             };
 
@@ -359,18 +429,62 @@ export const useFoliate = ({
 
                 if (lastTouchMoved || wasLongPress) return;
 
+                const tapClientX = ev.changedTouches?.[0]?.clientX;
                 setTimeout(() => {
                     const now = Date.now();
                     if (now - lastHandledTouchTapAt < 500) return;
                     if (!shouldHandleReaderTap(ev, now)) return;
                     lastHandledTouchTapAt = now;
-                    handleReaderTap();
+                    handleReaderTap(tapClientX);
                 }, 60);
             };
 
             doc.addEventListener('touchstart', handleTouchStart, { passive: true });
             doc.addEventListener('touchmove', handleTouchMove, { passive: true });
             doc.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+            // ── iOS long-press selection guard (paginated mode) ─────────────
+            // Upstream foliate-js pans the page on the very first touchmove
+            // pixel (paginator.js #onTouchMove: preventDefault + scrollBy), so
+            // on iOS the finger jitter during a long-press becomes a pan and
+            // the selection loupe never appears. Readest fixes this inside
+            // their foliate fork via a real `scrollLocked` check; upstream has
+            // no such hook, so we intercept touchmove in the CAPTURE phase
+            // (which runs before foliate's bubble listener on the same doc)
+            // and stop propagation while the gesture still looks like a
+            // long-press: small movement, or held past the long-press delay,
+            // or while the selection pipeline holds the scroll lock. We never
+            // call preventDefault here, so native selection is untouched.
+            // Real swipes exceed the slop quickly and pass through to foliate.
+            const SWIPE_SLOP_PX = 10;
+            let paginatedGesture = null; // { x, y, t, mode: 'undecided'|'pan'|'select' }
+
+            doc.addEventListener('touchstart', (ev) => {
+                const t = ev.touches[0];
+                if (!t || ev.touches.length > 1) { paginatedGesture = null; return; }
+                paginatedGesture = { x: t.screenX, y: t.screenY, t: Date.now(), mode: 'undecided' };
+            }, { capture: true, passive: true });
+
+            doc.addEventListener('touchmove', (ev) => {
+                if (settingsRef.current?.flow !== 'paginated') return;
+                if (ev.touches.length > 1) return; // let foliate handle pinch
+                if (view.renderer?.scrollLocked) { ev.stopPropagation(); return; }
+                if (!paginatedGesture || paginatedGesture.mode === 'pan') return;
+                if (paginatedGesture.mode === 'select') { ev.stopPropagation(); return; }
+
+                const t = ev.touches[0];
+                const dist = Math.hypot(t.screenX - paginatedGesture.x, t.screenY - paginatedGesture.y);
+                const elapsed = Date.now() - paginatedGesture.t;
+                if (dist > SWIPE_SLOP_PX) {
+                    // Held long enough before moving = selection drag; quick = swipe
+                    paginatedGesture.mode = elapsed > longPressMs ? 'select' : 'pan';
+                } else if (elapsed > longPressMs) {
+                    paginatedGesture.mode = 'select';
+                }
+                if (paginatedGesture.mode !== 'pan') ev.stopPropagation();
+            }, { capture: true, passive: true });
+
+            doc.addEventListener('touchend', () => { paginatedGesture = null; }, { capture: true, passive: true });
 
             // --- Overscroll Auto-Advance (Desktop/Wheel) — SCROLL MODE ONLY ---
             // Same as touch: paginated mode must be excluded because scrollTop is
@@ -522,12 +636,15 @@ export const useFoliate = ({
             };
 
             // ── pointerdown — Annotator.tsx:283 ─────────────────────────────
-            // Lock scroll immediately. If user just tapped (no drag), pointerup
-            // will unlock. Mirrors startInstantAnnotating() scrollLocked logic.
+            // Only track the pointer type here. Do NOT scroll-lock on every
+            // pointerdown: the lock is honored by the capture-phase touchmove
+            // guard above, so a blanket lock would block foliate's pan and
+            // kill swipe page-turns. Readest only locks here for instant
+            // annotation, a feature we don't have; locking during an ACTIVE
+            // selection is handled in the selectionchange listener below.
             doc.addEventListener('pointerdown', (ev) => {
                 lastPointerType.current = ev.pointerType;
-                scrollLock();
-            }, { passive: false });
+            }, { passive: true });
 
             // ── pointerup — Annotator.tsx:286, useTextSelector.ts:150-188 ───
             // This is the PRIMARY resolution path for mouse and iOS touch.
@@ -618,7 +735,7 @@ export const useFoliate = ({
                 if (now - lastHandledTouchTapAt < 500) return;
                 if (!shouldHandleReaderTap(ev, now)) return;
                 lastHandledTouchTapAt = now;
-                handleReaderTap();
+                handleReaderTap(ev.clientX);
             });
         };
 

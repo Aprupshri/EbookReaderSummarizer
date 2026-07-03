@@ -18,19 +18,19 @@ import ReaderFooter from './Reader/ReaderFooter';
 import SelectionMenu from './Reader/SelectionMenu';
 import { getHighlights, saveHighlight, deleteHighlight } from '../utils/storage';
 
-const Reader = ({ book, onBack, appTheme, onThemeChange }) => {
+const Reader = ({ book, onBack, onThemeChange }) => {
     const readerState = useReader({ book, onBack });
 
     const {
         viewerRef, location, isReady, showSummary, setShowSummary, showSettings, setShowSettings,
-        showAppearance, setShowAppearance, showToc, setShowToc, showNotes, setShowNotes, showControls, setShowControls,
+        showAppearance, setShowAppearance, showToc, setShowToc, showNotes, setShowNotes, showControls,
         toc, summaryLoading, summaryText, loadError,
         showRecall, setShowRecall, recallText, recallLoading, recallError, recallLength, setRecallLength, isOrientation,
         selection, showDictionary, setShowDictionary, clearSelection,
         showExplain, setShowExplain, explainText, explainLoading, explainError, explainSaved,
         showFocusSetup, setShowFocusSetup, isFocusMode, showFocusExit, focusGoal, focusTimeRemaining, showFocusCelebration,
-        settings, update, theme, fontSize, fontFamily, lineHeight, maxWidth, flow,
-        handleRecall, handleBack, handlePrev, handleNext, handleSummarize, handleHighlight, handleDictionary,
+        update, theme, fontSize, fontFamily, lineHeight, maxWidth, flow,
+        handleRecall, handleBack, handleSummarize, handleHighlight, handleDictionary,
         handleExplain, handleExplainSave, handleExplainFollowUp, handleStartFocus, handleExitFocus,
         showGenrePicker, setShowGenrePicker, handleGenreConfirmed,
     } = readerState;
@@ -137,18 +137,6 @@ const Reader = ({ book, onBack, appTheme, onThemeChange }) => {
                     style={{ outline: 'none', background: 'var(--paper)' }}
                 />
 
-                {flow === 'paginated' && (
-                    <div className="absolute inset-0 z-10 pointer-events-none">
-                        <div
-                            className="absolute inset-y-0 left-0 w-20 pointer-events-auto cursor-pointer nav-overlay"
-                            onClick={(e) => { e.stopPropagation(); handlePrev(); }}
-                        />
-                        <div
-                            className="absolute inset-y-0 right-0 w-20 pointer-events-auto cursor-pointer nav-overlay"
-                            onClick={(e) => { e.stopPropagation(); handleNext(); }}
-                        />
-                    </div>
-                )}
             </div>
 
             <TocSidebar

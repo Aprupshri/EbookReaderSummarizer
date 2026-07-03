@@ -714,4 +714,3 @@ foliate-view::part(container)::-webkit-scrollbar { display: none; }
 
 /* ── iOS PWA ── */
 .ios-pwa-reader { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-.nav-overlay { -webkit-tap-highlight-color: transparent; }
