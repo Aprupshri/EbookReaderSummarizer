@@ -37,8 +37,10 @@ const Reader = ({ book, onBack, onThemeChange }) => {
 
     const [bookmarks, setBookmarks] = useState([]);
     const [showToolbarHint, setShowToolbarHint] = useState(false);
+    const [showSelectTip, setShowSelectTip] = useState(false);
     const [showEntryDrawer, setShowEntryDrawer] = useState(false);
     const toolbarHintShown = useRef(false);
+    const selectTipShown = useRef(false);
 
     const handleSaveToCommonplace = () => {
         if (!selection?.word) return;
@@ -66,6 +68,22 @@ const Reader = ({ book, onBack, onThemeChange }) => {
             return () => clearTimeout(t);
         }
     }, [isReady]);
+
+    // One-time tip: selection is smoothest in Scroll view. Shown after the
+    // toolbar hint window has passed, only when reading in paginated mode.
+    useEffect(() => {
+        if (isReady && flow === 'paginated' && !selectTipShown.current && !localStorage.getItem('reader_scroll_select_tip_seen')) {
+            const t = setTimeout(() => {
+                selectTipShown.current = true;
+                setShowSelectTip(true);
+                setTimeout(() => {
+                    setShowSelectTip(false);
+                    localStorage.setItem('reader_scroll_select_tip_seen', '1');
+                }, 6000);
+            }, 7000);
+            return () => clearTimeout(t);
+        }
+    }, [isReady, flow]);
 
     const currentCfi = location?.start?.cfi;
     const isBookmarked = currentCfi && bookmarks.some(b => b.cfiRange === currentCfi);
@@ -202,6 +220,30 @@ const Reader = ({ book, onBack, onThemeChange }) => {
                     >
                         <span style={{ fontSize: 16 }}>☝</span>
                         <span>Tap the page to show or hide the toolbar</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showSelectTip && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 20 }}
+                        onClick={() => setShowSelectTip(false)}
+                        style={{
+                            position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
+                            background: 'color-mix(in oklab, var(--ink) 85%, transparent)',
+                            backdropFilter: 'blur(8px)',
+                            color: 'var(--paper)',
+                            fontSize: 13, lineHeight: 1.45, padding: '10px 18px', borderRadius: 'var(--r-lg)',
+                            boxShadow: 'var(--shadow-lg)',
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            maxWidth: 'calc(100vw - 32px)', cursor: 'pointer',
+                        }}
+                    >
+                        <span style={{ fontSize: 16 }}>✍️</span>
+                        <span>Selecting text? It works best in Scroll view — switch in Appearance → View</span>
                     </motion.div>
                 )}
             </AnimatePresence>

@@ -120,6 +120,12 @@ const AppearanceMenu = ({
                     </button>
                 </div>
             </div>
+
+            {flow === 'paginated' && (
+                <p style={{ fontSize: 11, lineHeight: 1.45, color: 'var(--ink-faint)', margin: '8px 2px 0' }}>
+                    Tip: selecting &amp; highlighting text works best in Scroll view.
+                </p>
+            )}
         </div>
     );
 };
